@@ -1,0 +1,140 @@
+<script setup lang="ts">
+import { useCourseStore } from '~/stores/courseStore'
+import { ref } from 'vue'
+
+const emit = defineEmits(['next'])
+const store = useCourseStore()
+const errors = ref<Record<string, string>>({})
+
+const validateForm = () => {
+  const newErrors: Record<string, string> = {}
+  
+  if (!store.title.trim()) {
+    newErrors.title = 'Pathway name is required'
+  }
+  if (!store.description.trim()) {
+    newErrors.description = 'Pathway overview is required'
+  }
+  if (!store.learningOutcomes.trim()) {
+    newErrors.learningOutcomes = 'Learning outcomes are required'
+  }
+  if (!store.targetAudience.trim()) {
+    newErrors.targetAudience = 'Target audience is required'
+  }
+  if (!store.whyTakeIt.trim()) {
+    newErrors.whyTakeIt = 'This field is required'
+  }
+
+  errors.value = newErrors
+  return Object.keys(newErrors).length === 0
+}
+
+const handleSubmit = () => {
+  if (validateForm()) {
+    emit('next')
+  }
+}
+</script>
+
+<template>
+  <div class="p-6 bg-white rounded-lg shadow-sm max-w-2xl w-full">
+    <h2 class="text-2xl font-bold mb-4">Pathway Details</h2>
+    <p class="text-gray-600 mb-6 w-10/12">
+      We'll use your title and description to automatically generate a pathway for you.
+    </p>
+
+    <div class="space-y-6">
+      <div>
+        <label for="title" class="block text-sm font-medium text-gray-700 mb-1">
+          Pathway Name <span class="text-red-500">*</span>
+        </label>
+        <input
+          id="title"
+          type="text"
+          v-model="store.title"
+          placeholder="Examples: Public Speaking 101, Learning piano, ..."
+          :class="[
+            'w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500',
+            errors.title ? 'border-red-500' : 'border-gray-300'
+          ]"
+        />
+        <p v-if="errors.title" class="mt-1 text-sm text-red-500">{{ errors.title }}</p>
+      </div>
+
+      <div>
+        <label for="description" class="block text-sm font-medium text-gray-700 mb-1">
+          Pathway Overview <span class="text-red-500">*</span>
+        </label>
+        <textarea
+          id="description"
+          v-model="store.description"
+          placeholder="Example: Learn the skills required to ..."
+          rows="4"
+          :class="[
+            'w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500',
+            errors.description ? 'border-red-500' : 'border-gray-300'
+          ]"
+        ></textarea>
+        <p v-if="errors.description" class="mt-1 text-sm text-red-500">{{ errors.description }}</p>
+      </div>
+
+      <div>
+        <label for="learningOutcomes" class="block text-sm font-medium text-gray-700 mb-1">
+          Learning outcomes <span class="text-red-500">*</span>
+        </label>
+        <textarea
+          id="learningOutcomes"
+          v-model="store.learningOutcomes"
+          placeholder="What will learners be able to do after completing this pathway?"
+          rows="4"
+          :class="[
+            'w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500',
+            errors.learningOutcomes ? 'border-red-500' : 'border-gray-300'
+          ]"
+        ></textarea>
+        <p v-if="errors.learningOutcomes" class="mt-1 text-sm text-red-500">{{ errors.learningOutcomes }}</p>
+      </div>
+
+      <div>
+        <label for="targetAudience" class="block text-sm font-medium text-gray-700 mb-1">
+          Who would benefit from this pathway? <span class="text-red-500">*</span>
+        </label>
+        <textarea
+          id="targetAudience"
+          v-model="store.targetAudience"
+          placeholder="Describe your target audience and their experience level..."
+          rows="4"
+          :class="[
+            'w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500',
+            errors.targetAudience ? 'border-red-500' : 'border-gray-300'
+          ]"
+        ></textarea>
+        <p v-if="errors.targetAudience" class="mt-1 text-sm text-red-500">{{ errors.targetAudience }}</p>
+      </div>
+
+      <div>
+        <label for="whyTakeIt" class="block text-sm font-medium text-gray-700 mb-1">
+          Why take this pathway? <span class="text-red-500">*</span>
+        </label>
+        <textarea
+          id="whyTakeIt"
+          v-model="store.whyTakeIt"
+          placeholder="What makes this pathway unique and valuable?"
+          rows="4"
+          :class="[
+            'w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500',
+            errors.whyTakeIt ? 'border-red-500' : 'border-gray-300'
+          ]"
+        ></textarea>
+        <p v-if="errors.whyTakeIt" class="mt-1 text-sm text-red-500">{{ errors.whyTakeIt }}</p>
+      </div>
+
+      <button 
+        @click="handleSubmit"
+        class="bg-black text-white px-6 py-2 rounded-md hover:bg-gray-800 transition-colors"
+      >
+        Next
+      </button>
+    </div>
+  </div>
+</template>
