@@ -1,28 +1,55 @@
-import { defineStore } from 'pinia'
+import { defineStore } from "pinia";
 
-export const useCourseStore = defineStore('course', {
+// Define interfaces for the pathway structure
+interface Activity {
+  id: string;
+  activityType: string;
+  title: string;
+  description: string;
+}
+
+interface Step {
+  id: string;
+  stepName: string;
+  activities: Activity[];
+  isExpanded?: boolean;
+}
+
+interface Pathway {
+  pathway_name: string;
+  steps: Step[];
+}
+
+export const useCourseStore = defineStore("course", {
   state: () => ({
-    title: '',
-    description: '',
-    learningOutcomes: '',
-    targetAudience: '',
-    whyTakeIt: ''
+    title: "",
+    description: "",
+    learningOutcomes: "",
+    targetAudience: "",
+    whyTakeIt: "",
+    pathway: {
+      pathway_name: "",
+      steps: [],
+    } as Pathway,
   }),
   actions: {
+    setPathway(pathway: Pathway) {
+      this.pathway = pathway;
+    },
     setTitle(title: string) {
-      this.title = title
+      this.title = title;
     },
     setDescription(description: string) {
-      this.description = description
+      this.description = description;
     },
     setLearningOutcomes(outcomes: string) {
-      this.learningOutcomes = outcomes
+      this.learningOutcomes = outcomes;
     },
     setTargetAudience(audience: string) {
-      this.targetAudience = audience
+      this.targetAudience = audience;
     },
     setWhyTakeIt(reason: string) {
-      this.whyTakeIt = reason
-    }
-  }
-})
+      this.whyTakeIt = reason;
+    },
+  },
+});

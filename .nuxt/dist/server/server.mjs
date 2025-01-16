@@ -1,0 +1,1 @@
+export { default } from "file:///Users/vishalpulikottil/Instinctive%20Clients/Nova%20(CI)/nova-course-creator-ai/node_modules/@nuxt/vite-builder/dist/runtime/vite-node.mjs"

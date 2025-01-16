@@ -10,10 +10,13 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
-    "nuxt": "^3.13.2",
+    "@nuxtjs/axios": "^5.13.6",
+    "@pinecone-database/pinecone": "^4.1.0",
     "@pinia/nuxt": "^0.5.1",
     "@vueuse/core": "^10.9.0",
-    "lucide-vue-next": "^0.363.0"
+    "lucide-vue-next": "^0.363.0",
+    "nuxt": "^3.13.2",
+    "openai": "^4.78.1"
   },
   "devDependencies": {
     "@nuxtjs/tailwindcss": "^6.11.4"
