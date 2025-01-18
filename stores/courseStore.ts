@@ -1,6 +1,21 @@
 import { defineStore } from "pinia";
 
-// Define interfaces for the pathway structure
+interface SourceItem {
+  document: string;
+  page: number;
+}
+
+interface VideoItem {
+  title: string;
+  url: string;
+  description: string;
+}
+
+interface Metadata {
+  sources?: SourceItem[];
+  videos?: VideoItem[];
+}
+
 interface Activity {
   id: string;
   activityType: string;
@@ -18,6 +33,7 @@ interface Step {
 interface Pathway {
   pathway_name: string;
   steps: Step[];
+  metadata?: Metadata;
 }
 
 export const useCourseStore = defineStore("course", {

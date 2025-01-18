@@ -11,32 +11,10 @@
               <h1 class="text-xl font-semibold">{{ store.title }}</h1>
             </div>
             <div class="flex items-center space-x-4">
-              <button class="text-gray-500 hover:text-gray-700">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  class="h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                  />
-                </svg>
-              </button>
               <button
                 class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
               >
-                Add content
+                Publish
               </button>
             </div>
           </div>
@@ -44,17 +22,57 @@
       </header>
 
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <CourseNavigation />
+        <CourseNavigation
+          :activeTab="activeTab"
+          :resourcesCount="myResourceCount"
+          @tabChange="handleTabChange"
+        />
         <div class="mt-6">
-          <CourseOutline />
+          <component
+            :is="
+              activeTab === 'Pathway Outline' ? CourseOutline : CourseResources
+            "
+            @countChanged="handleResourceCountChanged"
+          />
         </div>
       </div>
     </div>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+import { ref } from "vue";
 import { useCourseStore } from "~/stores/courseStore";
+import CourseNavigation from "~/components/CourseNavigation.vue";
+import CourseOutline from "~/components/CourseOutline.vue";
+import CourseResources from "~/components/CourseResources.vue";
+import Sidebar from "~/components/Sidebar.vue";
 
 const store = useCourseStore();
+
+/**
+ * Manage which tab is currently active
+ */
+const activeTab = ref("Pathway Outline");
+
+/**
+ * This ref will be updated whenever CourseResources.vue
+ * emits a "countChanged" event
+ */
+const myResourceCount = ref(0);
+
+/**
+ * Tab click handler from CourseNavigation
+ */
+function handleTabChange(tabName: string) {
+  activeTab.value = tabName;
+}
+
+/**
+ * This captures the emitted count from CourseResources.vue
+ * ("groupedSources.length" or similar)
+ */
+function handleResourceCountChanged(newCount: number) {
+  myResourceCount.value = newCount;
+}
 </script>

@@ -6,6 +6,7 @@ import { parentPort, threadId } from 'node:worker_threads';
 import { defineEventHandler, handleCacheHeaders, splitCookiesString, isEvent, createEvent, fetchWithEvent, getRequestHeader, eventHandler, setHeaders, sendRedirect, proxyRequest, createError, setResponseHeader, send, getResponseStatus, setResponseStatus, setResponseHeaders, getRequestHeaders, createApp, createRouter as createRouter$1, toNodeListener, lazyEventHandler, getRouterParam, getQuery as getQuery$1, readBody, getResponseStatusText } from 'file:///Users/vishalpulikottil/Instinctive%20Clients/Nova%20(CI)/nova-course-creator-ai/node_modules/h3/dist/index.mjs';
 import OpenAI from 'file:///Users/vishalpulikottil/Instinctive%20Clients/Nova%20(CI)/nova-course-creator-ai/node_modules/openai/index.mjs';
 import { Pinecone } from 'file:///Users/vishalpulikottil/Instinctive%20Clients/Nova%20(CI)/nova-course-creator-ai/node_modules/@pinecone-database/pinecone/dist/index.js';
+import axios from 'file:///Users/vishalpulikottil/Instinctive%20Clients/Nova%20(CI)/nova-course-creator-ai/node_modules/axios/index.js';
 import { getRequestDependencies, getPreloadLinks, getPrefetchLinks, createRenderer } from 'file:///Users/vishalpulikottil/Instinctive%20Clients/Nova%20(CI)/nova-course-creator-ai/node_modules/vue-bundle-renderer/dist/runtime.mjs';
 import { stringify, uneval } from 'file:///Users/vishalpulikottil/Instinctive%20Clients/Nova%20(CI)/nova-course-creator-ai/node_modules/devalue/index.js';
 import destr from 'file:///Users/vishalpulikottil/Instinctive%20Clients/Nova%20(CI)/nova-course-creator-ai/node_modules/destr/dist/index.mjs';
@@ -1034,6 +1035,30 @@ const pinecone = new Pinecone({
   apiKey: process.env.PINECONE_API_KEY
 });
 const index = pinecone.index(process.env.PINECONE_INDEX_NAME);
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+const YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3/search";
+async function queryYouTube(query) {
+  try {
+    const response = await axios.get(YOUTUBE_API_URL, {
+      params: {
+        part: "snippet",
+        q: query,
+        type: "video",
+        maxResults: 5,
+        // Limit to top 5 videos
+        key: YOUTUBE_API_KEY
+      }
+    });
+    return response.data.items.map((item) => ({
+      title: item.snippet.title,
+      url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
+      description: item.snippet.description
+    }));
+  } catch (error) {
+    console.error("Error querying YouTube:", error);
+    return [];
+  }
+}
 const pathway = defineEventHandler(async (event) => {
   const query = getQuery$1(event);
   const {
@@ -1068,28 +1093,39 @@ const pathway = defineEventHandler(async (event) => {
         page: match.metadata.page_number
       }
     }));
+    const youtubeResults = await queryYouTube(
+      `${pathway_name} ${pathway_overview}`
+    );
     const systemPrompt = `
       Your role is to flesh out a learning pathway. I'm going to give you details for a pathway, and I need you to provide a series of steps and activities that the user can take to achieve the learning goals.
-      
+
       Pathway name: ${pathway_name}
       Pathway overview: ${pathway_overview}
       Pathway learning outcomes: ${pathway_learning_outcomes}
       Pathway Audience: ${audience}
       Pathway Rationale: ${rationale}
 
-
       IMPORTANT RULES:
-      1. The four types of activities you can pick from are Read, Discuss, Reflect and Practice. Make sure you stick to these activity types.
+      1. The five types of activities you can pick from are Read, Watch, Discuss, Reflect and Practice. Make sure you stick to these activity types.
       2. Don't include the step numbers in the response e.g. Step 1, Step 2, etc. Just the title of the step.
-      3. For the 'Read' activiites, use the Document and Page number provided in the context to reference the source material.
+      3. For the 'Read' activities, use the Document and Page number provided in the context to reference the source material.
       4. Make sure to format the Document name to some more readable. e.g. 'Document: Timothy_Keller_Center_Church.pdf' should be 'Center Church by Timothy Keller'.
       5. For the Read activities, estimate a page range as well. e.g. 'Read pages 10-20 of Center Church by Timothy Keller'.
-      6. Each pathway should be between 4-7 steps long, with 2-4 activities per step.
-      
+      6. Make sure there are no overlapping pages across activiites.
+      7. Each pathway should be between 5-7 steps long, with 3-4 activities per step.
+      8. Include relevant videos from YouTube if they enhance the pathway. If you pick a YouTube video, please include "videoUrl" in the activity so we know where to link.
+      9. Mkae sure you include the videoUrl in the activity.
+
       CONTEXT:
       Use the following context to generate the pathway steps and activities:
       ${relevantChunks.map(
       (chunk) => `${chunk.text} (Document: ${chunk.metadata.document}, Page: ${chunk.metadata.page})`
+    ).join("\n")}
+
+      YOUTUBE VIDEOS:
+      ${youtubeResults.map(
+      (video) => `${video.title}: ${video.url}
+Description: ${video.description}`
     ).join("\n")}
     `;
     const functions = [
@@ -1117,7 +1153,7 @@ const pathway = defineEventHandler(async (event) => {
                       properties: {
                         activityType: {
                           type: "string",
-                          description: "Type of the activity. The four types of activities are Read, Discuss, Reflect and Practice."
+                          description: "Type of the activity. The five types of activities are Read, Watch, Discuss, Reflect and Practice."
                         },
                         title: {
                           type: "string",
@@ -1126,6 +1162,10 @@ const pathway = defineEventHandler(async (event) => {
                         description: {
                           type: "string",
                           description: "A brief summary or instructions for the activity."
+                        },
+                        videoUrl: {
+                          type: "string",
+                          description: "If this is a Watch activity, include the YouTube link here."
                         }
                       },
                       required: ["activityType", "title", "description"]
@@ -1143,9 +1183,10 @@ const pathway = defineEventHandler(async (event) => {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [{ role: "system", content: systemPrompt }],
-      max_completion_tokens: 2e3,
+      max_completion_tokens: 5e3,
       functions,
-      function_call: { name: "generateLearningPathway" }
+      function_call: { name: "generateLearningPathway" },
+      temperature: 0.8
     });
     const functionResponse = JSON.parse(
       completion.choices[0].message.function_call.arguments
