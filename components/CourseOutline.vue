@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import {
   Search,
   FolderClosed,
   ChevronDown,
   ChevronUp,
-  File,
+  BookOpenText,
+  Lightbulb,
+  MessageCircle,
   Plus,
+  HandHelping,
   Sparkles,
   ThumbsUp,
   ThumbsDown,
@@ -43,12 +46,14 @@ const steps = computed(() => {
       title: activity.title,
       description: activity.description,
     })),
-    isExpanded: step.isExpanded || false,
+    isExpanded: true,
   }));
 });
 
 const searchQuery = ref("");
 const isAllExpanded = ref(true);
+const feedback = ref<"up" | "down" | null>(null);
+const generatingDots = ref(".");
 
 const toggleStep = (step: Step) => {
   step.isExpanded = !step.isExpanded;
@@ -60,6 +65,24 @@ const toggleAllSteps = () => {
     step.isExpanded = isAllExpanded.value;
   });
 };
+
+const filteredSteps = computed(() => {
+  if (!searchQuery.value) {
+    return steps.value;
+  }
+  const query = searchQuery.value.toLowerCase();
+  return steps.value.filter((step) => {
+    const stepNameMatches = step.stepName.toLowerCase().includes(query);
+    const activityMatches = step.activities.some((activity) =>
+      activity.title.toLowerCase().includes(query)
+    );
+    return stepNameMatches || activityMatches;
+  });
+});
+
+const handleFeedback = (type: "up" | "down") => {
+  feedback.value = feedback.value === type ? null : type;
+};
 </script>
 
 <template>
@@ -68,16 +91,32 @@ const toggleAllSteps = () => {
     <div class="bg-blue-50 p-4 rounded-lg flex items-center justify-between">
       <div class="flex items-center space-x-2 text-blue-700">
         <Sparkles class="h-5 w-5" />
-        <span
-          >Your course outline was created successfully! How did we do?</span
-        >
+        <span>Your pathway was created successfully. How did we do?</span>
       </div>
       <div class="flex space-x-2">
-        <button class="text-blue-700 hover:text-blue-800">
-          <ThumbsUp class="h-5 w-5" />
+        <button
+          :class="{
+            'text-blue-700': feedback !== 'up',
+            'text-blue-800': feedback === 'up',
+          }"
+          @click="handleFeedback('up')"
+        >
+          <ThumbsUp
+            :class="{ 'fill-current': feedback === 'up' }"
+            class="h-5 w-5"
+          />
         </button>
-        <button class="text-blue-700 hover:text-blue-800">
-          <ThumbsDown class="h-5 w-5" />
+        <button
+          :class="{
+            'text-blue-700': feedback !== 'down',
+            'text-blue-800': feedback === 'down',
+          }"
+          @click="handleFeedback('down')"
+        >
+          <ThumbsDown
+            :class="{ 'fill-current': feedback === 'down' }"
+            class="h-5 w-5"
+          />
         </button>
       </div>
     </div>
@@ -90,7 +129,7 @@ const toggleAllSteps = () => {
       <input
         v-model="searchQuery"
         type="text"
-        placeholder="Find module or lesson..."
+        placeholder="Find step or activity..."
         class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
       />
     </div>
@@ -112,7 +151,7 @@ const toggleAllSteps = () => {
     <!-- Module list -->
     <div class="space-y-3">
       <div
-        v-for="step in steps"
+        v-for="step in filteredSteps"
         :key="step.id"
         class="bg-white rounded-lg border border-gray-200"
       >
@@ -130,15 +169,15 @@ const toggleAllSteps = () => {
               class="text-sm text-gray-600 hover:text-gray-800 flex items-center space-x-1.5"
               @click.stop
             >
-              <Plus class="h-4 w-4" />
-              <span>Add Content</span>
+              <!-- <Plus class="h-4 w-4" />
+              <span>Add Content</span> -->
             </button>
-            <div class="h-4 w-px bg-gray-200"></div>
+            <!-- <div class="h-4 w-px bg-gray-200"></div>
             <span class="text-sm text-gray-500">Draft</span>
-            <div class="h-4 w-px bg-gray-200"></div>
-            <button class="text-gray-400 hover:text-gray-600">
+            <div class="h-4 w-px bg-gray-200"></div> -->
+            <!-- <button class="text-gray-400 hover:text-gray-600">
               <MoreHorizontal class="h-5 w-5" />
-            </button>
+            </button> -->
             <component
               :is="step.isExpanded ? ChevronUp : ChevronDown"
               class="h-5 w-5 text-gray-400"
@@ -153,23 +192,39 @@ const toggleAllSteps = () => {
             :key="activity.id"
             class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 border-b border-gray-200 last:border-b-0"
           >
-            <div class="flex items-center space-x-3 pl-8">
-              <File class="h-5 w-5 text-gray-400" />
-              <span class="text-gray-700">{{ activity.title }}</span>
+            <div class="pl-8">
+              <div class="flex items-center space-x-3">
+                <div v-if="activity.activityType === 'Read'">
+                  <BookOpenText class="h-5 w-5 text-gray-400" />
+                </div>
+                <div v-else-if="activity.activityType === 'Reflect'">
+                  <Lightbulb class="h-5 w-5 text-gray-400" />
+                </div>
+                <div v-else-if="activity.activityType === 'Practice'">
+                  <HandHelping class="h-5 w-5 text-gray-400" />
+                </div>
+                <div v-else-if="activity.activityType === 'Discuss'">
+                  <MessageCircle class="h-5 w-5 text-gray-400" />
+                </div>
+                <span class="text-gray-700">{{ activity.title }}</span>
+              </div>
+              <p class="pt-1 w-8/12 text-gray-500 text-sm">
+                {{ activity.description }}
+              </p>
             </div>
             <div class="flex items-center space-x-3">
-              <span class="text-sm text-gray-500">Draft</span>
-              <div class="h-4 w-px bg-gray-200"></div>
-              <button class="text-gray-400 hover:text-gray-600">
+              <!-- <span class="text-sm text-gray-500">Draft</span>
+              <div class="h-4 w-px bg-gray-200"></div> -->
+              <!-- <button class="text-gray-400 hover:text-gray-600">
                 <MoreHorizontal class="h-5 w-5" />
-              </button>
+              </button> -->
             </div>
           </div>
           <div
             v-if="step.activities?.length === 0"
             class="px-4 py-3 text-center text-sm text-gray-500"
           >
-            No content yet. Click "Add Content" to get started.
+            No content was generated here.
           </div>
         </div>
       </div>

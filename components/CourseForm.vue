@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useCourseStore } from "~/stores/courseStore";
-import { ref } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { generatePathway } from "~/services/pathway";
 import type { Pathway } from "~/types/pathway";
 import { useRouter } from "vue-router";
@@ -10,6 +10,21 @@ const store = useCourseStore();
 const errors = ref<Record<string, string>>({});
 const isLoading = ref(false);
 const router = useRouter();
+const generatingDots = ref(".");
+let dotsInterval: ReturnType<typeof setInterval> | undefined;
+
+onMounted(() => {
+  dotsInterval = setInterval(() => {
+    generatingDots.value =
+      generatingDots.value.length < 3 ? generatingDots.value + "." : ".";
+  }, 400);
+});
+
+onUnmounted(() => {
+  if (dotsInterval) {
+    clearInterval(dotsInterval);
+  }
+});
 
 const validateForm = () => {
   const newErrors: Record<string, string> = {};
@@ -191,7 +206,7 @@ const handleSubmit = async () => {
         :disabled="isLoading"
         class="bg-black text-white px-6 py-2 rounded-md hover:bg-gray-800 transition-colors"
       >
-        <div v-if="isLoading">Generating...</div>
+        <div v-if="isLoading">Generating{{ generatingDots }}</div>
         <div v-else>Generate</div>
       </button>
     </div>

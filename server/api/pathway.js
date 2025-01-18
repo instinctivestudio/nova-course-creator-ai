@@ -49,7 +49,7 @@ export default defineEventHandler(async (event) => {
     // Query Pinecone for similar vectors
     const queryResponse = await index.query({
       vector: queryEmbedding,
-      topK: 10,
+      topK: 20,
       includeMetadata: true,
     });
 
@@ -71,10 +71,24 @@ export default defineEventHandler(async (event) => {
       Pathway learning outcomes: ${pathway_learning_outcomes}
       Pathway Audience: ${audience}
       Pathway Rationale: ${rationale}
+
+
+      IMPORTANT RULES:
+      1. The four types of activities you can pick from are Read, Discuss, Reflect and Practice. Make sure you stick to these activity types.
+      2. Don't include the step numbers in the response e.g. Step 1, Step 2, etc. Just the title of the step.
+      3. For the 'Read' activiites, use the Document and Page number provided in the context to reference the source material.
+      4. Make sure to format the Document name to some more readable. e.g. 'Document: Timothy_Keller_Center_Church.pdf' should be 'Center Church by Timothy Keller'.
+      5. For the Read activities, estimate a page range as well. e.g. 'Read pages 10-20 of Center Church by Timothy Keller'.
+      6. Each pathway should be between 4-7 steps long, with 2-4 activities per step.
       
       CONTEXT:
       Use the following context to generate the pathway steps and activities:
-      ${relevantChunks.map((chunk) => chunk.text).join("\n")}
+      ${relevantChunks
+        .map(
+          (chunk) =>
+            `${chunk.text} (Document: ${chunk.metadata.document}, Page: ${chunk.metadata.page})`
+        )
+        .join("\n")}
     `;
 
     // Define the function for OpenAI
@@ -106,7 +120,7 @@ export default defineEventHandler(async (event) => {
                         activityType: {
                           type: "string",
                           description:
-                            "Type of the activity (e.g., read, watch, quiz, discuss).",
+                            "Type of the activity. The four types of activities are Read, Discuss, Reflect and Practice.",
                         },
                         title: {
                           type: "string",
@@ -133,8 +147,9 @@ export default defineEventHandler(async (event) => {
 
     // Make OpenAI API call
     const completion = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-4o",
       messages: [{ role: "system", content: systemPrompt }],
+      max_completion_tokens: 2000,
       functions,
       function_call: { name: "generateLearningPathway" },
     });
