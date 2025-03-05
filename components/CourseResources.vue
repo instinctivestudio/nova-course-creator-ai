@@ -35,11 +35,6 @@ function transformFilenameToTitle(filename: string): string {
   return name.trim();
 }
 
-/**
- * Group references by docTitle.
- * If you have multiple pages from the SAME document,
- * they’ll be combined under a single docTitle.
- */
 function groupSources(sourcesArr: SourceItem[]) {
   const map = new Map<string, number[]>();
   for (const src of sourcesArr) {
@@ -97,7 +92,6 @@ watch(
       <h2 class="text-2xl font-bold">Resources</h2>
     </div>
 
-    <!-- Cards side-by-side with "flat" design (no shadow, simple gray border) -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <!-- Book References Card -->
       <section class="bg-white border border-gray-200 p-4">

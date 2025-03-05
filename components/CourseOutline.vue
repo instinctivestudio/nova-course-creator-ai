@@ -1,96 +1,3 @@
-<script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
-import {
-  Search,
-  FolderClosed,
-  ChevronDown,
-  ChevronUp,
-  BookOpenText,
-  Lightbulb,
-  MessageCircle,
-  Video,
-  HandHelping,
-  Sparkles,
-  ThumbsUp,
-  ThumbsDown,
-  Layers,
-  PlayCircle,
-} from "lucide-vue-next";
-import { useCourseStore } from "~/stores/courseStore";
-
-// Define interfaces for clarity
-interface Activity {
-  id: string;
-  activityType: string;
-  title: string;
-  description: string;
-  videoUrl?: string;
-}
-
-interface Step {
-  id: string;
-  stepName: string;
-  activities: Activity[];
-  isExpanded?: boolean;
-}
-
-const store = useCourseStore();
-
-const localSteps = ref<Step[]>([]);
-onMounted(() => {
-  // Initialize a local copy of steps instead of a computed array
-  localSteps.value = store.pathway.steps.map((step, stepIndex) => ({
-    id: step.id || `step-${stepIndex}`,
-    stepName: step.stepName,
-    activities: step.activities.map((activity, activityIndex) => ({
-      id: activity.id || `activity-${stepIndex}-${activityIndex}`,
-      activityType: activity.activityType,
-      title: activity.title,
-      description: activity.description,
-      videoUrl: activity.videoUrl || "",
-    })),
-    // Each step starts expanded
-    isExpanded: true,
-  }));
-});
-
-// Track feedback and search
-const searchQuery = ref("");
-const feedback = ref<"up" | "down" | null>(null);
-
-// Track global expand/collapse
-const isAllExpanded = ref(true);
-const toggleAllSteps = () => {
-  isAllExpanded.value = !isAllExpanded.value;
-  localSteps.value.forEach((step) => {
-    step.isExpanded = isAllExpanded.value;
-  });
-};
-
-// Toggle a single step
-const toggleStep = (step: Step) => {
-  step.isExpanded = !step.isExpanded;
-};
-
-const filteredSteps = computed(() => {
-  if (!searchQuery.value) {
-    return localSteps.value;
-  }
-  const query = searchQuery.value.toLowerCase();
-  return localSteps.value.filter((step) => {
-    const stepNameMatches = step.stepName.toLowerCase().includes(query);
-    const activityMatches = step.activities.some((activity) =>
-      activity.title.toLowerCase().includes(query)
-    );
-    return stepNameMatches || activityMatches;
-  });
-});
-
-const handleFeedback = (type: "up" | "down") => {
-  feedback.value = feedback.value === type ? null : type;
-};
-</script>
-
 <template>
   <div class="space-y-6">
     <!-- Success / feedback bar -->
@@ -243,3 +150,97 @@ const handleFeedback = (type: "up" | "down") => {
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from "vue";
+import {
+  Search,
+  FolderClosed,
+  ChevronDown,
+  ChevronUp,
+  BookOpenText,
+  Lightbulb,
+  MessageCircle,
+  Video,
+  HandHelping,
+  Sparkles,
+  ThumbsUp,
+  ThumbsDown,
+  Layers,
+  PlayCircle,
+} from "lucide-vue-next";
+import { useCourseStore } from "~/stores/courseStore";
+
+interface Activity {
+  id: string;
+  activityType: string;
+  title: string;
+  description: string;
+  videoUrl?: string;
+}
+
+interface Step {
+  id: string;
+  stepName: string;
+  activities: Activity[];
+  isExpanded?: boolean;
+}
+
+const store = useCourseStore();
+
+const localSteps = ref<Step[]>([]);
+onMounted(() => {
+  // Initialize a local copy of steps
+  localSteps.value = store.pathway.steps.map((step, stepIndex) => ({
+    id: step.id || `step-${stepIndex}`,
+    stepName: step.stepName,
+    activities: step.activities.map((activity, activityIndex) => ({
+      id: activity.id || `activity-${stepIndex}-${activityIndex}`,
+      activityType: activity.activityType,
+      title: activity.title,
+      description: activity.description,
+      videoUrl: activity.videoUrl || "",
+    })),
+    // Each step starts expanded
+    isExpanded: true,
+  }));
+});
+
+// Track feedback and search
+const searchQuery = ref("");
+const feedback = ref<"up" | "down" | null>(null);
+
+// Track global expand/collapse
+const isAllExpanded = ref(true);
+const toggleAllSteps = () => {
+  isAllExpanded.value = !isAllExpanded.value;
+  localSteps.value.forEach((step) => {
+    step.isExpanded = isAllExpanded.value;
+  });
+};
+
+// Toggle a single step
+const toggleStep = (step: Step) => {
+  step.isExpanded = !step.isExpanded;
+};
+
+// Filter steps by search query
+const filteredSteps = computed(() => {
+  if (!searchQuery.value) {
+    return localSteps.value;
+  }
+  const query = searchQuery.value.toLowerCase();
+  return localSteps.value.filter((step) => {
+    const stepNameMatches = step.stepName.toLowerCase().includes(query);
+    const activityMatches = step.activities.some((activity) =>
+      activity.title.toLowerCase().includes(query)
+    );
+    return stepNameMatches || activityMatches;
+  });
+});
+
+// Track feedback button clicks
+const handleFeedback = (type: "up" | "down") => {
+  feedback.value = feedback.value === type ? null : type;
+};
+</script>

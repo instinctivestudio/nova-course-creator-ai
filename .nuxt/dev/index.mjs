@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { parentPort, threadId } from 'node:worker_threads';
 import { defineEventHandler, handleCacheHeaders, splitCookiesString, isEvent, createEvent, fetchWithEvent, getRequestHeader, eventHandler, setHeaders, sendRedirect, proxyRequest, createError, setResponseHeader, send, getResponseStatus, setResponseStatus, setResponseHeaders, getRequestHeaders, createApp, createRouter as createRouter$1, toNodeListener, lazyEventHandler, getRouterParam, getQuery as getQuery$1, readBody, getResponseStatusText } from 'file:///Users/vishalpulikottil/Instinctive%20Clients/Nova%20(CI)/nova-course-creator-ai/node_modules/h3/dist/index.mjs';
-import OpenAI from 'file:///Users/vishalpulikottil/Instinctive%20Clients/Nova%20(CI)/nova-course-creator-ai/node_modules/openai/index.mjs';
+import OpenAI$1, { OpenAI } from 'file:///Users/vishalpulikottil/Instinctive%20Clients/Nova%20(CI)/nova-course-creator-ai/node_modules/openai/index.mjs';
 import { Pinecone } from 'file:///Users/vishalpulikottil/Instinctive%20Clients/Nova%20(CI)/nova-course-creator-ai/node_modules/@pinecone-database/pinecone/dist/index.js';
 import axios from 'file:///Users/vishalpulikottil/Instinctive%20Clients/Nova%20(CI)/nova-course-creator-ai/node_modules/axios/index.js';
 import { getRequestDependencies, getPreloadLinks, getPrefetchLinks, createRenderer } from 'file:///Users/vishalpulikottil/Instinctive%20Clients/Nova%20(CI)/nova-course-creator-ai/node_modules/vue-bundle-renderer/dist/runtime.mjs';
@@ -827,10 +827,12 @@ const errorHandler = (async function errorhandler(error, event) {
   return send(event, html);
 });
 
+const _lazy_tZ6N5j = () => Promise.resolve().then(function () { return pathwayDetails$1; });
 const _lazy_5jQRmV = () => Promise.resolve().then(function () { return pathway$1; });
 const _lazy_zVUUBM = () => Promise.resolve().then(function () { return renderer$1; });
 
 const handlers = [
+  { route: '/api/pathway-details', handler: _lazy_tZ6N5j, lazy: true, middleware: false, method: undefined },
   { route: '/api/pathway', handler: _lazy_5jQRmV, lazy: true, middleware: false, method: undefined },
   { route: '/__nuxt_error', handler: _lazy_zVUUBM, lazy: true, middleware: false, method: undefined },
   { route: '/**', handler: _lazy_zVUUBM, lazy: true, middleware: false, method: undefined }
@@ -1028,7 +1030,97 @@ const errorDev = /*#__PURE__*/Object.freeze({
   template: template$1
 });
 
-const openai = new OpenAI({
+const openai$1 = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+const pathwayDetails = defineEventHandler(async (event) => {
+  var _a, _b;
+  try {
+    const body = await readBody(event);
+    const { prompt } = body;
+    if (!prompt) {
+      return createError({
+        statusCode: 400,
+        message: "Prompt is required"
+      });
+    }
+    const response = await openai$1.chat.completions.create({
+      model: "gpt-4-turbo",
+      // Use your preferred model
+      messages: [
+        {
+          role: "system",
+          content: "You are an assistant that helps create educational pathway details from natural language prompts."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      functions: [
+        {
+          name: "generate_pathway_details",
+          description: "Generate detailed information for a pathway based on a prompt",
+          parameters: {
+            type: "object",
+            properties: {
+              title: {
+                type: "string",
+                description: "A concise, engaging title for the pathway"
+              },
+              description: {
+                type: "string",
+                description: "A comprehensive overview of what the pathway covers"
+              },
+              learningOutcomes: {
+                type: "string",
+                description: "Specific skills or knowledge learners will gain from completing the pathway"
+              },
+              targetAudience: {
+                type: "string",
+                description: "Description of who would benefit most from taking this pathway"
+              },
+              whyTakeIt: {
+                type: "string",
+                description: "Compelling reasons why someone should take this pathway"
+              }
+            },
+            required: [
+              "title",
+              "description",
+              "learningOutcomes",
+              "targetAudience",
+              "whyTakeIt"
+            ]
+          }
+        }
+      ],
+      function_call: { name: "generate_pathway_details" }
+    });
+    const functionCall = (_b = (_a = response.choices[0]) == null ? void 0 : _a.message) == null ? void 0 : _b.function_call;
+    if (!functionCall) {
+      return createError({
+        statusCode: 500,
+        message: "Failed to generate pathway details"
+      });
+    }
+    const pathwayDetails = JSON.parse(functionCall.arguments);
+    return pathwayDetails;
+  } catch (error) {
+    console.error("Error generating pathway details:", error);
+    return createError({
+      statusCode: 500,
+      message: "Failed to generate pathway details"
+    });
+  }
+});
+
+const pathwayDetails$1 = /*#__PURE__*/Object.freeze({
+  __proto__: null,
+  default: pathwayDetails
+});
+
+const openai = new OpenAI$1({
   apiKey: process.env.OPENAI_API_KEY
 });
 const pinecone = new Pinecone({

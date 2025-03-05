@@ -4,6 +4,7 @@ import { useCourseStore } from "~/stores/courseStore";
 const router = useRouter();
 const store = useCourseStore();
 const isLoading = ref(false);
+const currentStep = ref(1); // 1 = Prompt, 2 = Form
 
 const handleNext = async () => {
   isLoading.value = true;
@@ -14,6 +15,15 @@ const handleNext = async () => {
     isLoading.value = false;
   }
 };
+
+const goToFormStep = () => {
+  currentStep.value = 2;
+};
+
+const goToGenerateStep = async () => {
+  await handleNext();
+  router.push("/pathway");
+};
 </script>
 
 <template>
@@ -23,8 +33,9 @@ const handleNext = async () => {
       v-else
       class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 items-center"
     >
-      <CourseForm @next="handleNext" />
-      <CoursePreview />
+      <PathwayPrompt v-if="currentStep === 1" @next="goToFormStep" />
+      <PathwayForm v-else @next="goToGenerateStep" />
+      <PathwayPreview />
     </div>
   </div>
 </template>

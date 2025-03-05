@@ -68,7 +68,7 @@ const handleSubmit = async () => {
         "steps" in response
       ) {
         store.setPathway(response as Pathway);
-        router.push("/course");
+        router.push("/pathway");
       } else {
         console.error(
           "Invalid response format from generatePathway:",
