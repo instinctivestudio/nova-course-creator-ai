@@ -53,6 +53,14 @@ const handleSubmit = async () => {
   if (validateForm()) {
     isLoading.value = true;
     try {
+      console.log("Submitting form with data:", {
+        pathway_name: store.title,
+        pathway_overview: store.description,
+        pathway_learning_outcomes: store.learningOutcomes,
+        audience: store.targetAudience,
+        rationale: store.whyTakeIt,
+      });
+
       const response = await generatePathway({
         pathway_name: store.title,
         pathway_overview: store.description,
@@ -61,13 +69,18 @@ const handleSubmit = async () => {
         rationale: store.whyTakeIt,
       });
 
-      if (
-        response &&
-        typeof response === "object" &&
-        "pathway_name" in response &&
-        "steps" in response
-      ) {
-        store.setPathway(response as Pathway);
+      console.log("API response:", response);
+
+      if (response && typeof response === "object" && "steps" in response) {
+        // Ensure we properly set the name and description
+        const pathwayData = {
+          name: store.title,
+          description: store.description,
+          steps: response.steps as any[], // Cast steps to array since we know it's valid
+        } as Pathway;
+
+        console.log("Setting pathway data:", pathwayData);
+        store.setPathway(pathwayData);
         router.push("/pathway");
       } else {
         console.error(

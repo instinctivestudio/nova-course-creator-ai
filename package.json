@@ -19,6 +19,7 @@
     "openai": "^4.78.1"
   },
   "devDependencies": {
-    "@nuxtjs/tailwindcss": "^6.11.4"
+    "@nuxtjs/tailwindcss": "^6.11.4",
+    "@types/lodash": "^4.17.16"
   }
 }

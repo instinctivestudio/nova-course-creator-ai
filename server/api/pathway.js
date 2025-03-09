@@ -107,15 +107,18 @@ export default defineEventHandler(async (event) => {
       Pathway Rationale: ${rationale}
 
       IMPORTANT RULES:
-      1. The five types of activities you can pick from are Read, Watch, Discuss, Reflect and Practice. Make sure you stick to these activity types.
-      2. Don't include the step numbers in the response e.g. Step 1, Step 2, etc. Just the title of the step.
-      3. For the 'Read' activities, use the Document and Page number provided in the context to reference the source material.
-      4. Make sure to format the Document name to some more readable. e.g. 'Document: Timothy_Keller_Center_Church.pdf' should be 'Center Church by Timothy Keller'.
-      5. For the Read activities, estimate a page range as well. e.g. 'Read pages 10-20 of Center Church by Timothy Keller'.
-      6. Make sure there are no overlapping pages across activiites.
-      7. Each pathway should be between 5-7 steps long, with 3-4 activities per step.
-      8. Include relevant videos from YouTube if they enhance the pathway. If you pick a YouTube video, please include "videoUrl" in the activity so we know where to link.
-      9. Mkae sure you include the videoUrl in the activity.
+      1. Structure the pathway as follows: A Pathway contains Steps, and each Step contains Activities.
+      2. Each Activity must have a name and description.
+      3. For reading activities, include relevant text in the "readData" field.
+      4. If an Activity should link to a PDF document, include URLs in the "pdfUrls" array.
+      5. For video activities, include relevant YouTube URLs in the "videoUrls" array.
+      6. For quiz activities, create appropriate questions in the "quiz" array. 
+         - Each question should have a "type" field with either "subjective" (open-ended) or "objective" (multiple choice).
+         - For objective questions, include "options" array with possible answers and "correctOptions" array with the correct answers.
+         - Assign appropriate "points" value for each question.
+      7. Don't include step numbers in names like "Step 1", "Step 2", etc. Just use descriptive titles.
+      8. Include sources where relevant, and format document names to be reader-friendly.
+      9. Each pathway should have 5-7 steps, with 3-4 activities per step.
 
       CONTEXT:
       Use the following context to generate the pathway steps and activities:
@@ -135,25 +138,36 @@ export default defineEventHandler(async (event) => {
         .join("\n")}
     `;
 
-    // Define the function for OpenAI (with "videoUrl" for watch activities)
+    // Define the function for OpenAI to match base_pathway_schema.ts
     const functions = [
       {
         name: "generateLearningPathway",
         description:
-          "Generates an array of pathway steps, each containing one or more activities.",
+          "Generates a learning pathway with steps and activities according to the schema.",
         parameters: {
           type: "object",
           properties: {
+            name: {
+              type: "string",
+              description: "The name or title of the pathway.",
+            },
+            description: {
+              type: "string",
+              description: "A comprehensive description of the pathway.",
+            },
             steps: {
               type: "array",
-              description:
-                "List of steps in the learning pathway. Each step includes its name and an array of activities.",
+              description: "List of steps in the learning pathway.",
               items: {
                 type: "object",
                 properties: {
-                  stepName: {
+                  name: {
                     type: "string",
                     description: "The name or title of the step.",
+                  },
+                  description: {
+                    type: "string",
+                    description: "A detailed description of the step.",
                   },
                   activities: {
                     type: "array",
@@ -161,35 +175,86 @@ export default defineEventHandler(async (event) => {
                     items: {
                       type: "object",
                       properties: {
-                        activityType: {
-                          type: "string",
-                          description:
-                            "Type of the activity. The five types of activities are Read, Watch, Discuss, Reflect and Practice.",
-                        },
-                        title: {
+                        name: {
                           type: "string",
                           description: "A concise title for the activity.",
                         },
                         description: {
                           type: "string",
                           description:
-                            "A brief summary or instructions for the activity.",
+                            "Instructions or details for the activity.",
                         },
-                        videoUrl: {
+                        readData: {
                           type: "string",
+                          description: "Text content for reading activities.",
+                        },
+                        pdfUrls: {
+                          type: "array",
+                          items: {
+                            type: "string",
+                          },
                           description:
-                            "If this is a Watch activity, include the YouTube link here.",
+                            "URLs to PDF resources for this activity.",
+                        },
+                        videoUrls: {
+                          type: "array",
+                          items: {
+                            type: "string",
+                          },
+                          description:
+                            "URLs to video resources for this activity.",
+                        },
+                        quiz: {
+                          type: "array",
+                          description: "Quiz questions for this activity.",
+                          items: {
+                            type: "object",
+                            properties: {
+                              question: {
+                                type: "string",
+                                description: "The quiz question text.",
+                              },
+                              type: {
+                                type: "string",
+                                enum: ["subjective", "objective"],
+                                description:
+                                  "Type of question: subjective (open-ended) or objective (multiple choice).",
+                              },
+                              options: {
+                                type: "array",
+                                items: {
+                                  type: "string",
+                                },
+                                description:
+                                  "Answer options for multiple choice questions.",
+                              },
+                              correctOptions: {
+                                type: "array",
+                                items: {
+                                  type: "string",
+                                },
+                                description:
+                                  "Correct answer options for multiple choice questions.",
+                              },
+                              points: {
+                                type: "number",
+                                description:
+                                  "Points awarded for correctly answering this question.",
+                              },
+                            },
+                            required: ["question", "type"],
+                          },
                         },
                       },
-                      required: ["activityType", "title", "description"],
+                      required: ["name", "description"],
                     },
                   },
                 },
-                required: ["stepName", "activities"],
+                required: ["name", "description", "activities"],
               },
             },
           },
-          required: ["steps"],
+          required: ["name", "description", "steps"],
         },
       },
     ];
@@ -209,12 +274,14 @@ export default defineEventHandler(async (event) => {
       completion.choices[0].message.function_call.arguments
     );
 
-    // Return the final JSON (the watch activities already contain their "videoUrl")
+    // Return the final JSON with the new structure
     return {
-      pathway_name,
+      name: pathway_name,
+      description: pathway_overview,
       steps: functionResponse.steps,
       metadata: {
         sources: relevantChunks.map((chunk) => chunk.metadata),
+        youtubeVideos: youtubeResults,
       },
     };
   } catch (error) {

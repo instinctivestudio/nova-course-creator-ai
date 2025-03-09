@@ -827,13 +827,17 @@ const errorHandler = (async function errorhandler(error, event) {
   return send(event, html);
 });
 
+const _lazy_Ph0naV = () => Promise.resolve().then(function () { return auth$1; });
 const _lazy_tZ6N5j = () => Promise.resolve().then(function () { return pathwayDetails$1; });
 const _lazy_5jQRmV = () => Promise.resolve().then(function () { return pathway$1; });
+const _lazy_Q5LmhC = () => Promise.resolve().then(function () { return regenerate$1; });
 const _lazy_zVUUBM = () => Promise.resolve().then(function () { return renderer$1; });
 
 const handlers = [
+  { route: '/api/auth', handler: _lazy_Ph0naV, lazy: true, middleware: false, method: undefined },
   { route: '/api/pathway-details', handler: _lazy_tZ6N5j, lazy: true, middleware: false, method: undefined },
   { route: '/api/pathway', handler: _lazy_5jQRmV, lazy: true, middleware: false, method: undefined },
+  { route: '/api/regenerate', handler: _lazy_Q5LmhC, lazy: true, middleware: false, method: undefined },
   { route: '/__nuxt_error', handler: _lazy_zVUUBM, lazy: true, middleware: false, method: undefined },
   { route: '/**', handler: _lazy_zVUUBM, lazy: true, middleware: false, method: undefined }
 ];
@@ -1030,7 +1034,43 @@ const errorDev = /*#__PURE__*/Object.freeze({
   template: template$1
 });
 
-const openai$1 = new OpenAI({
+const auth = defineEventHandler(async (event) => {
+  try {
+    const body = await readBody(event);
+    const CORRECT_PASSWORD = process.env.APP_PASSWORD || "nova2024";
+    if (!body || !body.password) {
+      return {
+        success: false,
+        message: "Password is required"
+      };
+    }
+    if (body.password === CORRECT_PASSWORD) {
+      return {
+        success: true,
+        token: "valid_token_" + Date.now()
+        // Simple token generation
+      };
+    } else {
+      return {
+        success: false,
+        message: "Incorrect password"
+      };
+    }
+  } catch (error) {
+    console.error("Auth API error:", error);
+    return {
+      success: false,
+      message: "Server error during authentication"
+    };
+  }
+});
+
+const auth$1 = /*#__PURE__*/Object.freeze({
+  __proto__: null,
+  default: auth
+});
+
+const openai$2 = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 const pathwayDetails = defineEventHandler(async (event) => {
@@ -1044,7 +1084,7 @@ const pathwayDetails = defineEventHandler(async (event) => {
         message: "Prompt is required"
       });
     }
-    const response = await openai$1.chat.completions.create({
+    const response = await openai$2.chat.completions.create({
       model: "gpt-4-turbo",
       // Use your preferred model
       messages: [
@@ -1120,6 +1160,254 @@ const pathwayDetails$1 = /*#__PURE__*/Object.freeze({
   default: pathwayDetails
 });
 
+const openai$1 = new OpenAI$1({
+  apiKey: process.env.OPENAI_API_KEY
+});
+const pinecone$1 = new Pinecone({
+  apiKey: process.env.PINECONE_API_KEY
+});
+const index$1 = pinecone$1.index(process.env.PINECONE_INDEX_NAME);
+const YOUTUBE_API_KEY$1 = process.env.YOUTUBE_API_KEY;
+const YOUTUBE_API_URL$1 = "https://www.googleapis.com/youtube/v3/search";
+async function queryYouTube$1(query) {
+  try {
+    const response = await axios.get(YOUTUBE_API_URL$1, {
+      params: {
+        part: "snippet",
+        q: query,
+        type: "video",
+        maxResults: 5,
+        // Limit to top 5 videos
+        key: YOUTUBE_API_KEY$1
+      }
+    });
+    return response.data.items.map((item) => ({
+      title: item.snippet.title,
+      url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
+      description: item.snippet.description
+    }));
+  } catch (error) {
+    console.error("Error querying YouTube:", error);
+    return [];
+  }
+}
+const pathway = defineEventHandler(async (event) => {
+  const query = getQuery$1(event);
+  const {
+    pathway_name,
+    pathway_overview,
+    pathway_learning_outcomes,
+    audience,
+    rationale
+  } = query;
+  if (!pathway_name || !pathway_overview || !pathway_learning_outcomes || !audience || !rationale) {
+    return createError({
+      statusCode: 400,
+      statusMessage: "Missing required parameters"
+    });
+  }
+  try {
+    const embeddingResponse = await openai$1.embeddings.create({
+      model: "text-embedding-3-small",
+      input: `${pathway_name} ${pathway_overview}`,
+      encoding_format: "float"
+    });
+    const queryEmbedding = embeddingResponse.data[0].embedding;
+    const queryResponse = await index$1.query({
+      vector: queryEmbedding,
+      topK: 20,
+      includeMetadata: true
+    });
+    const relevantChunks = queryResponse.matches.map((match) => ({
+      text: match.metadata.content,
+      metadata: {
+        document: match.metadata.pdf_name,
+        page: match.metadata.page_number
+      }
+    }));
+    const youtubeResults = await queryYouTube$1(
+      `${pathway_name} ${pathway_overview}`
+    );
+    const systemPrompt = `
+      Your role is to flesh out a learning pathway. I'm going to give you details for a pathway, and I need you to provide a series of steps and activities that the user can take to achieve the learning goals.
+
+      Pathway name: ${pathway_name}
+      Pathway overview: ${pathway_overview}
+      Pathway learning outcomes: ${pathway_learning_outcomes}
+      Pathway Audience: ${audience}
+      Pathway Rationale: ${rationale}
+
+      IMPORTANT RULES:
+      1. Structure the pathway as follows: A Pathway contains Steps, and each Step contains Activities.
+      2. Each Activity must have a name and description.
+      3. For reading activities, include relevant text in the "readData" field.
+      4. If an Activity should link to a PDF document, include URLs in the "pdfUrls" array.
+      5. For video activities, include relevant YouTube URLs in the "videoUrls" array.
+      6. For quiz activities, create appropriate questions in the "quiz" array. 
+         - Each question should have a "type" field with either "subjective" (open-ended) or "objective" (multiple choice).
+         - For objective questions, include "options" array with possible answers and "correctOptions" array with the correct answers.
+         - Assign appropriate "points" value for each question.
+      7. Don't include step numbers in names like "Step 1", "Step 2", etc. Just use descriptive titles.
+      8. Include sources where relevant, and format document names to be reader-friendly.
+      9. Each pathway should have 5-7 steps, with 3-4 activities per step.
+
+      CONTEXT:
+      Use the following context to generate the pathway steps and activities:
+      ${relevantChunks.map(
+      (chunk) => `${chunk.text} (Document: ${chunk.metadata.document}, Page: ${chunk.metadata.page})`
+    ).join("\n")}
+
+      YOUTUBE VIDEOS:
+      ${youtubeResults.map(
+      (video) => `${video.title}: ${video.url}
+Description: ${video.description}`
+    ).join("\n")}
+    `;
+    const functions = [
+      {
+        name: "generateLearningPathway",
+        description: "Generates a learning pathway with steps and activities according to the schema.",
+        parameters: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              description: "The name or title of the pathway."
+            },
+            description: {
+              type: "string",
+              description: "A comprehensive description of the pathway."
+            },
+            steps: {
+              type: "array",
+              description: "List of steps in the learning pathway.",
+              items: {
+                type: "object",
+                properties: {
+                  name: {
+                    type: "string",
+                    description: "The name or title of the step."
+                  },
+                  description: {
+                    type: "string",
+                    description: "A detailed description of the step."
+                  },
+                  activities: {
+                    type: "array",
+                    description: "A list of activities under this step.",
+                    items: {
+                      type: "object",
+                      properties: {
+                        name: {
+                          type: "string",
+                          description: "A concise title for the activity."
+                        },
+                        description: {
+                          type: "string",
+                          description: "Instructions or details for the activity."
+                        },
+                        readData: {
+                          type: "string",
+                          description: "Text content for reading activities."
+                        },
+                        pdfUrls: {
+                          type: "array",
+                          items: {
+                            type: "string"
+                          },
+                          description: "URLs to PDF resources for this activity."
+                        },
+                        videoUrls: {
+                          type: "array",
+                          items: {
+                            type: "string"
+                          },
+                          description: "URLs to video resources for this activity."
+                        },
+                        quiz: {
+                          type: "array",
+                          description: "Quiz questions for this activity.",
+                          items: {
+                            type: "object",
+                            properties: {
+                              question: {
+                                type: "string",
+                                description: "The quiz question text."
+                              },
+                              type: {
+                                type: "string",
+                                enum: ["subjective", "objective"],
+                                description: "Type of question: subjective (open-ended) or objective (multiple choice)."
+                              },
+                              options: {
+                                type: "array",
+                                items: {
+                                  type: "string"
+                                },
+                                description: "Answer options for multiple choice questions."
+                              },
+                              correctOptions: {
+                                type: "array",
+                                items: {
+                                  type: "string"
+                                },
+                                description: "Correct answer options for multiple choice questions."
+                              },
+                              points: {
+                                type: "number",
+                                description: "Points awarded for correctly answering this question."
+                              }
+                            },
+                            required: ["question", "type"]
+                          }
+                        }
+                      },
+                      required: ["name", "description"]
+                    }
+                  }
+                },
+                required: ["name", "description", "activities"]
+              }
+            }
+          },
+          required: ["name", "description", "steps"]
+        }
+      }
+    ];
+    const completion = await openai$1.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "system", content: systemPrompt }],
+      max_completion_tokens: 5e3,
+      functions,
+      function_call: { name: "generateLearningPathway" },
+      temperature: 0.8
+    });
+    const functionResponse = JSON.parse(
+      completion.choices[0].message.function_call.arguments
+    );
+    return {
+      name: pathway_name,
+      description: pathway_overview,
+      steps: functionResponse.steps,
+      metadata: {
+        sources: relevantChunks.map((chunk) => chunk.metadata),
+        youtubeVideos: youtubeResults
+      }
+    };
+  } catch (error) {
+    console.error("Error generating pathway:", error);
+    return createError({
+      statusCode: 500,
+      statusMessage: "Failed to generate pathway"
+    });
+  }
+});
+
+const pathway$1 = /*#__PURE__*/Object.freeze({
+  __proto__: null,
+  default: pathway
+});
+
 const openai = new OpenAI$1({
   apiKey: process.env.OPENAI_API_KEY
 });
@@ -1151,31 +1439,26 @@ async function queryYouTube(query) {
     return [];
   }
 }
-const pathway = defineEventHandler(async (event) => {
-  const query = getQuery$1(event);
-  const {
-    pathway_name,
-    pathway_overview,
-    pathway_learning_outcomes,
-    audience,
-    rationale
-  } = query;
-  if (!pathway_name || !pathway_overview || !pathway_learning_outcomes || !audience || !rationale) {
-    return createError({
-      statusCode: 400,
-      statusMessage: "Missing required parameters"
-    });
-  }
+const regenerate = defineEventHandler(async (event) => {
   try {
+    const body = await readBody(event);
+    const { pathway, itemType, itemIndex, activityIndex, regenerationPrompt } = body;
+    if (!pathway || !itemType || regenerationPrompt === void 0) {
+      return createError({
+        statusCode: 400,
+        statusMessage: "Missing required parameters"
+      });
+    }
+    const queryText = `${pathway.name} ${pathway.description} ${regenerationPrompt}`;
     const embeddingResponse = await openai.embeddings.create({
       model: "text-embedding-3-small",
-      input: `${pathway_name} ${pathway_overview}`,
+      input: queryText,
       encoding_format: "float"
     });
     const queryEmbedding = embeddingResponse.data[0].embedding;
     const queryResponse = await index.query({
       vector: queryEmbedding,
-      topK: 20,
+      topK: 15,
       includeMetadata: true
     });
     const relevantChunks = queryResponse.matches.map((match) => ({
@@ -1185,123 +1468,275 @@ const pathway = defineEventHandler(async (event) => {
         page: match.metadata.page_number
       }
     }));
-    const youtubeResults = await queryYouTube(
-      `${pathway_name} ${pathway_overview}`
-    );
-    const systemPrompt = `
-      Your role is to flesh out a learning pathway. I'm going to give you details for a pathway, and I need you to provide a series of steps and activities that the user can take to achieve the learning goals.
-
-      Pathway name: ${pathway_name}
-      Pathway overview: ${pathway_overview}
-      Pathway learning outcomes: ${pathway_learning_outcomes}
-      Pathway Audience: ${audience}
-      Pathway Rationale: ${rationale}
-
-      IMPORTANT RULES:
-      1. The five types of activities you can pick from are Read, Watch, Discuss, Reflect and Practice. Make sure you stick to these activity types.
-      2. Don't include the step numbers in the response e.g. Step 1, Step 2, etc. Just the title of the step.
-      3. For the 'Read' activities, use the Document and Page number provided in the context to reference the source material.
-      4. Make sure to format the Document name to some more readable. e.g. 'Document: Timothy_Keller_Center_Church.pdf' should be 'Center Church by Timothy Keller'.
-      5. For the Read activities, estimate a page range as well. e.g. 'Read pages 10-20 of Center Church by Timothy Keller'.
-      6. Make sure there are no overlapping pages across activiites.
-      7. Each pathway should be between 5-7 steps long, with 3-4 activities per step.
-      8. Include relevant videos from YouTube if they enhance the pathway. If you pick a YouTube video, please include "videoUrl" in the activity so we know where to link.
-      9. Mkae sure you include the videoUrl in the activity.
-
-      CONTEXT:
-      Use the following context to generate the pathway steps and activities:
-      ${relevantChunks.map(
-      (chunk) => `${chunk.text} (Document: ${chunk.metadata.document}, Page: ${chunk.metadata.page})`
-    ).join("\n")}
-
-      YOUTUBE VIDEOS:
-      ${youtubeResults.map(
-      (video) => `${video.title}: ${video.url}
+    const youtubeResults = await queryYouTube(queryText);
+    let systemPrompt = "";
+    let functions;
+    if (itemType === "step") {
+      systemPrompt = `
+        Your role is to regenerate a step in a learning pathway based on user feedback.
+        
+        Current Pathway: ${pathway.name}
+        Pathway Description: ${pathway.description}
+        User's regeneration request: ${regenerationPrompt}
+        
+        INSTRUCTIONS:
+        1. Create a new step to replace the existing one based on the user's request.
+        2. The step should have a name, description, and activities that fit within the overall pathway structure.
+        3. Maintain consistency with the other steps in the pathway.
+        4. Include a variety of activity types as appropriate (reading materials, PDFs, videos, quizzes).
+        
+        CONTEXT:
+        ${relevantChunks.map(
+        (chunk) => `${chunk.text} (Document: ${chunk.metadata.document}, Page: ${chunk.metadata.page})`
+      ).join("\n")}
+          
+        YOUTUBE VIDEOS:
+        ${youtubeResults.map(
+        (video) => `${video.title}: ${video.url}
 Description: ${video.description}`
-    ).join("\n")}
-    `;
-    const functions = [
-      {
-        name: "generateLearningPathway",
-        description: "Generates an array of pathway steps, each containing one or more activities.",
-        parameters: {
-          type: "object",
-          properties: {
-            steps: {
-              type: "array",
-              description: "List of steps in the learning pathway. Each step includes its name and an array of activities.",
-              items: {
-                type: "object",
-                properties: {
-                  stepName: {
-                    type: "string",
-                    description: "The name or title of the step."
-                  },
-                  activities: {
-                    type: "array",
-                    description: "A list of activities under this step.",
-                    items: {
-                      type: "object",
-                      properties: {
-                        activityType: {
-                          type: "string",
-                          description: "Type of the activity. The five types of activities are Read, Watch, Discuss, Reflect and Practice."
-                        },
-                        title: {
-                          type: "string",
-                          description: "A concise title for the activity."
-                        },
-                        description: {
-                          type: "string",
-                          description: "A brief summary or instructions for the activity."
-                        },
-                        videoUrl: {
-                          type: "string",
-                          description: "If this is a Watch activity, include the YouTube link here."
-                        }
+      ).join("\n")}
+      `;
+      functions = [
+        {
+          name: "generateStep",
+          description: "Generates a replacement step for a learning pathway.",
+          parameters: {
+            type: "object",
+            properties: {
+              name: {
+                type: "string",
+                description: "The name or title of the step."
+              },
+              description: {
+                type: "string",
+                description: "A detailed description of the step."
+              },
+              activities: {
+                type: "array",
+                description: "A list of activities under this step.",
+                items: {
+                  type: "object",
+                  properties: {
+                    name: {
+                      type: "string",
+                      description: "A concise title for the activity."
+                    },
+                    description: {
+                      type: "string",
+                      description: "Instructions or details for the activity."
+                    },
+                    readData: {
+                      type: "string",
+                      description: "Text content for reading activities."
+                    },
+                    pdfUrls: {
+                      type: "array",
+                      items: {
+                        type: "string"
                       },
-                      required: ["activityType", "title", "description"]
+                      description: "URLs to PDF resources for this activity."
+                    },
+                    videoUrls: {
+                      type: "array",
+                      items: {
+                        type: "string"
+                      },
+                      description: "URLs to video resources for this activity."
+                    },
+                    quiz: {
+                      type: "array",
+                      description: "Quiz questions for this activity.",
+                      items: {
+                        type: "object",
+                        properties: {
+                          question: {
+                            type: "string",
+                            description: "The quiz question text."
+                          },
+                          type: {
+                            type: "string",
+                            enum: ["subjective", "objective"],
+                            description: "Type of question: subjective (open-ended) or objective (multiple choice)."
+                          },
+                          options: {
+                            type: "array",
+                            items: {
+                              type: "string"
+                            },
+                            description: "Answer options for multiple choice questions."
+                          },
+                          correctOptions: {
+                            type: "array",
+                            items: {
+                              type: "string"
+                            },
+                            description: "Correct answer options for multiple choice questions."
+                          },
+                          points: {
+                            type: "number",
+                            description: "Points awarded for correctly answering this question."
+                          }
+                        },
+                        required: ["question", "type"]
+                      }
                     }
-                  }
-                },
-                required: ["stepName", "activities"]
+                  },
+                  required: ["name", "description"]
+                }
               }
-            }
-          },
-          required: ["steps"]
+            },
+            required: ["name", "description", "activities"]
+          }
         }
-      }
-    ];
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [{ role: "system", content: systemPrompt }],
-      max_completion_tokens: 5e3,
-      functions,
-      function_call: { name: "generateLearningPathway" },
-      temperature: 0.8
-    });
-    const functionResponse = JSON.parse(
-      completion.choices[0].message.function_call.arguments
-    );
-    return {
-      pathway_name,
-      steps: functionResponse.steps,
-      metadata: {
-        sources: relevantChunks.map((chunk) => chunk.metadata)
-      }
-    };
+      ];
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "system", content: systemPrompt }],
+        functions,
+        function_call: { name: "generateStep" },
+        temperature: 0.7
+      });
+      const generatedStep = JSON.parse(
+        completion.choices[0].message.function_call.arguments
+      );
+      return {
+        success: true,
+        regeneratedItem: generatedStep
+      };
+    } else if (itemType === "activity") {
+      const step = pathway.steps[itemIndex];
+      systemPrompt = `
+        Your role is to regenerate an activity in a learning pathway step based on user feedback.
+        
+        Current Pathway: ${pathway.name}
+        Step Name: ${step.name}
+        Step Description: ${step.description}
+        User's regeneration request: ${regenerationPrompt}
+        
+        INSTRUCTIONS:
+        1. Create a new activity to replace the existing one based on the user's request.
+        2. The activity should fit within the current step and overall pathway structure.
+        3. Be creative and consider different types of learning materials (reading content, PDFs, videos, quizzes).
+        4. If creating quiz questions, make them challenging and educational.
+        
+        CONTEXT:
+        ${relevantChunks.map(
+        (chunk) => `${chunk.text} (Document: ${chunk.metadata.document}, Page: ${chunk.metadata.page})`
+      ).join("\n")}
+          
+        YOUTUBE VIDEOS:
+        ${youtubeResults.map(
+        (video) => `${video.title}: ${video.url}
+Description: ${video.description}`
+      ).join("\n")}
+      `;
+      functions = [
+        {
+          name: "generateActivity",
+          description: "Generates a replacement activity for a learning pathway step.",
+          parameters: {
+            type: "object",
+            properties: {
+              name: {
+                type: "string",
+                description: "A concise title for the activity."
+              },
+              description: {
+                type: "string",
+                description: "Instructions or details for the activity."
+              },
+              readData: {
+                type: "string",
+                description: "Text content for reading activities."
+              },
+              pdfUrls: {
+                type: "array",
+                items: {
+                  type: "string"
+                },
+                description: "URLs to PDF resources for this activity."
+              },
+              videoUrls: {
+                type: "array",
+                items: {
+                  type: "string"
+                },
+                description: "URLs to video resources for this activity."
+              },
+              quiz: {
+                type: "array",
+                description: "Quiz questions for this activity.",
+                items: {
+                  type: "object",
+                  properties: {
+                    question: {
+                      type: "string",
+                      description: "The quiz question text."
+                    },
+                    type: {
+                      type: "string",
+                      enum: ["subjective", "objective"],
+                      description: "Type of question: subjective (open-ended) or objective (multiple choice)."
+                    },
+                    options: {
+                      type: "array",
+                      items: {
+                        type: "string"
+                      },
+                      description: "Answer options for multiple choice questions."
+                    },
+                    correctOptions: {
+                      type: "array",
+                      items: {
+                        type: "string"
+                      },
+                      description: "Correct answer options for multiple choice questions."
+                    },
+                    points: {
+                      type: "number",
+                      description: "Points awarded for correctly answering this question."
+                    }
+                  },
+                  required: ["question", "type"]
+                }
+              }
+            },
+            required: ["name", "description"]
+          }
+        }
+      ];
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [{ role: "system", content: systemPrompt }],
+        functions,
+        function_call: { name: "generateActivity" },
+        temperature: 0.7
+      });
+      const generatedActivity = JSON.parse(
+        completion.choices[0].message.function_call.arguments
+      );
+      return {
+        success: true,
+        regeneratedItem: generatedActivity
+      };
+    } else {
+      return createError({
+        statusCode: 400,
+        statusMessage: "Invalid item type for regeneration"
+      });
+    }
   } catch (error) {
-    console.error("Error generating pathway:", error);
+    console.error("Error regenerating content:", error);
     return createError({
       statusCode: 500,
-      statusMessage: "Failed to generate pathway"
+      statusMessage: "Failed to regenerate content"
     });
   }
 });
 
-const pathway$1 = /*#__PURE__*/Object.freeze({
+const regenerate$1 = /*#__PURE__*/Object.freeze({
   __proto__: null,
-  default: pathway
+  default: regenerate
 });
 
 const Vue3 = version[0] === "3";

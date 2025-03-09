@@ -1,10 +1,26 @@
 <script setup>
 import { useCourseStore } from "~/stores/courseStore";
+import { ref, onMounted } from "vue";
+import { useRouter } from "vue-router";
 
 const router = useRouter();
 const store = useCourseStore();
 const isLoading = ref(false);
 const currentStep = ref(1); // 1 = Prompt, 2 = Form
+
+// Check if the user has already generated a pathway
+onMounted(() => {
+  // If there are steps, it means a pathway has been generated
+  if (store.pathway.steps && store.pathway.steps.length > 0) {
+    router.push("/pathway");
+  }
+
+  // Check authentication
+  const token = localStorage.getItem("authToken");
+  if (!token) {
+    router.push("/login");
+  }
+});
 
 const handleNext = async () => {
   isLoading.value = true;

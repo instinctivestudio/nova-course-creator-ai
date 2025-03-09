@@ -13,25 +13,37 @@ interface VideoItem {
 
 interface Metadata {
   sources?: SourceItem[];
-  videos?: VideoItem[];
+  youtubeVideos?: VideoItem[];
+}
+
+interface QuizQuestion {
+  question: string;
+  type: "subjective" | "objective";
+  options?: string[];
+  correctOptions?: string[];
+  points?: number;
+  _id?: string;
 }
 
 interface Activity {
-  id: string;
-  activityType: string;
-  title: string;
+  name: string;
   description: string;
+  readData?: string;
+  pdfUrls?: string[];
+  videoUrls?: string[];
+  quiz?: QuizQuestion[];
 }
 
 interface Step {
-  id: string;
-  stepName: string;
+  name: string;
+  description: string;
   activities: Activity[];
   isExpanded?: boolean;
 }
 
 interface Pathway {
-  pathway_name: string;
+  name: string;
+  description: string;
   steps: Step[];
   metadata?: Metadata;
 }
@@ -44,7 +56,8 @@ export const useCourseStore = defineStore("course", {
     targetAudience: "",
     whyTakeIt: "",
     pathway: {
-      pathway_name: "",
+      name: "",
+      description: "",
       steps: [],
     } as Pathway,
   }),

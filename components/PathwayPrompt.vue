@@ -79,7 +79,7 @@ const handleGenerateDetails = async () => {
         <textarea
           id="prompt"
           v-model="prompt"
-          placeholder="Example: I want to create a beginner-friendly pathway on digital marketing that covers social media, SEO, and content creation..."
+          placeholder="Example:"
           rows="6"
           :class="[
             'w-full px-4 py-2 border rounded-md focus:ring-blue-500 focus:border-blue-500',
