@@ -53,6 +53,14 @@ const handleSubmit = async () => {
   if (validateForm()) {
     isLoading.value = true;
     try {
+      console.log("Calling generatePathway with params:", {
+        pathway_name: store.title,
+        pathway_overview: store.description,
+        pathway_learning_outcomes: store.learningOutcomes,
+        audience: store.targetAudience,
+        rationale: store.whyTakeIt,
+      });
+
       const response = await generatePathway({
         pathway_name: store.title,
         pathway_overview: store.description,
@@ -61,10 +69,13 @@ const handleSubmit = async () => {
         rationale: store.whyTakeIt,
       });
 
+      console.log("Response from generatePathway:", response);
+
+      // Check if name property exists (server returns 'name' but client checks for 'pathway_name')
       if (
         response &&
         typeof response === "object" &&
-        "pathway_name" in response &&
+        ("name" in response || "pathway_name" in response) &&
         "steps" in response
       ) {
         store.setPathway(response as Pathway);

@@ -3,20 +3,83 @@ import { Pinecone } from "@pinecone-database/pinecone";
 import axios from "axios";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY || "",
 });
 
 const pinecone = new Pinecone({
-  apiKey: process.env.PINECONE_API_KEY,
+  apiKey: process.env.PINECONE_API_KEY || "",
 });
 
-const index = pinecone.index(process.env.PINECONE_INDEX_NAME);
+const index = process.env.PINECONE_INDEX_NAME
+  ? pinecone.index(process.env.PINECONE_INDEX_NAME)
+  : pinecone.index("default-index"); // Fallback index name
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3/search";
 
+// Define types
+interface YouTubeVideo {
+  title: string;
+  url: string;
+  description: string;
+}
+
+interface ChunkMetadata {
+  document: string;
+  page: string | number;
+}
+
+interface RelevantChunk {
+  text: string;
+  metadata: ChunkMetadata;
+}
+
+interface QuizQuestion {
+  question: string;
+  type: "subjective" | "objective";
+  options?: string[];
+  correctOptions?: string[];
+  points: number;
+}
+
+interface Activity {
+  name: string;
+  description: string;
+  readData?: string;
+  pdfUrls?: string[];
+  videoUrls?: string[];
+  quiz?: QuizQuestion[];
+}
+
+interface Step {
+  name: string;
+  description: string;
+  activities: Activity[];
+}
+
+interface Pathway {
+  name: string;
+  description: string;
+  steps: Step[];
+}
+
+interface PathwayResponse extends Pathway {
+  metadata: {
+    sources: ChunkMetadata[];
+    youtubeVideos: YouTubeVideo[];
+  };
+}
+
+interface PathwayQueryParams {
+  pathway_name: string;
+  pathway_overview: string;
+  pathway_learning_outcomes: string;
+  audience: string;
+  rationale: string;
+}
+
 // Helper function to query YouTube
-async function queryYouTube(query) {
+async function queryYouTube(query: string): Promise<YouTubeVideo[]> {
   try {
     const response = await axios.get(YOUTUBE_API_URL, {
       params: {
@@ -29,7 +92,7 @@ async function queryYouTube(query) {
     });
 
     // Map relevant fields
-    return response.data.items.map((item) => ({
+    return response.data.items.map((item: any) => ({
       title: item.snippet.title,
       url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
       description: item.snippet.description,
@@ -41,7 +104,7 @@ async function queryYouTube(query) {
 }
 
 export default defineEventHandler(async (event) => {
-  const query = getQuery(event);
+  const query = getQuery(event) as PathwayQueryParams;
 
   const {
     pathway_name,
@@ -83,13 +146,15 @@ export default defineEventHandler(async (event) => {
     });
 
     // Extract chunks from Pinecone results
-    const relevantChunks = queryResponse.matches.map((match) => ({
-      text: match.metadata.content,
-      metadata: {
-        document: match.metadata.pdf_name,
-        page: match.metadata.page_number,
-      },
-    }));
+    const relevantChunks: RelevantChunk[] = queryResponse.matches.map(
+      (match: any) => ({
+        text: match.metadata.content,
+        metadata: {
+          document: match.metadata.pdf_name,
+          page: match.metadata.page_number,
+        },
+      })
+    );
 
     // Query YouTube for relevant videos
     const youtubeResults = await queryYouTube(
@@ -271,11 +336,11 @@ export default defineEventHandler(async (event) => {
 
     // Parse the function call response
     const functionResponse = JSON.parse(
-      completion.choices[0].message.function_call.arguments
-    );
+      completion.choices[0].message.function_call?.arguments || "{}"
+    ) as Pathway;
 
     // Return the final JSON with the new structure
-    return {
+    const result = {
       name: pathway_name,
       description: pathway_overview,
       steps: functionResponse.steps,
@@ -283,7 +348,14 @@ export default defineEventHandler(async (event) => {
         sources: relevantChunks.map((chunk) => chunk.metadata),
         youtubeVideos: youtubeResults,
       },
-    };
+    } as PathwayResponse;
+
+    console.log(
+      "Returning pathway from API:",
+      JSON.stringify(result).substring(0, 200) + "..."
+    );
+
+    return result;
   } catch (error) {
     console.error("Error generating pathway:", error);
     return createError({

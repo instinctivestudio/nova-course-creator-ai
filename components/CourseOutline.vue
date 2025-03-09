@@ -1136,11 +1136,20 @@ async function submitStepRegeneration() {
 
   if (stepIndex === -1) return;
 
+  console.log(
+    `Starting regeneration for step index ${stepIndex} with id ${step.id}`
+  );
+
   // Set regenerating state
   isRegenerating.value = true;
   step.isRegenerating = true;
 
   try {
+    console.log(
+      `Calling regenerateContent for step ${stepIndex} with prompt:`,
+      regeneratePrompt.value
+    );
+
     const response = (await regenerateContent({
       pathway: store.pathway,
       itemType: "step",
@@ -1148,8 +1157,14 @@ async function submitStepRegeneration() {
       regenerationPrompt: regeneratePrompt.value,
     })) as RegenerationResponse;
 
+    console.log(`Regeneration response for step ${stepIndex}:`, response);
+
     if (response && response.success && response.regeneratedItem) {
       const regeneratedStep = response.regeneratedItem;
+      console.log(
+        `Successfully regenerated step ${stepIndex}:`,
+        regeneratedStep
+      );
 
       // Update activities with ids
       const activities =
@@ -1171,7 +1186,8 @@ async function submitStepRegeneration() {
         isExpanded: true,
       };
 
-      // Update store
+      // Note: The store is already updated in the service, but we'll
+      // update it again here to ensure local UI state is consistent
       store.pathway.steps[stepIndex] = {
         name: regeneratedStep.name,
         description: regeneratedStep.description,
@@ -1184,9 +1200,11 @@ async function submitStepRegeneration() {
           quiz: a.quiz,
         })),
       };
+    } else {
+      console.error(`Regeneration failed for step ${stepIndex}:`, response);
     }
   } catch (error) {
-    console.error("Error regenerating step:", error);
+    console.error(`Error regenerating step ${stepIndex}:`, error);
   } finally {
     isRegenerating.value = false;
     step.isRegenerating = false;
@@ -1214,11 +1232,23 @@ async function submitActivityRegeneration() {
 
   if (currentStepIndex === -1 || currentActivityIndex === -1) return;
 
+  console.log(
+    `Starting regeneration for activity ${currentActivity.id} in step ${currentStep.id}`
+  );
+  console.log(
+    `Step index: ${currentStepIndex}, Activity index: ${currentActivityIndex}`
+  );
+
   // Set regenerating state
   isRegenerating.value = true;
   currentActivity.isRegenerating = true;
 
   try {
+    console.log(
+      `Calling regenerateContent for activity with prompt:`,
+      regeneratePrompt.value
+    );
+
     const response = (await regenerateContent({
       pathway: store.pathway,
       itemType: "activity",
@@ -1227,8 +1257,11 @@ async function submitActivityRegeneration() {
       regenerationPrompt: regeneratePrompt.value,
     })) as RegenerationResponse;
 
+    console.log(`Regeneration response for activity:`, response);
+
     if (response && response.success && response.regeneratedItem) {
       const regeneratedActivity = response.regeneratedItem;
+      console.log(`Successfully regenerated activity:`, regeneratedActivity);
 
       // Update local activity
       const updatedActivity = {
@@ -1245,7 +1278,8 @@ async function submitActivityRegeneration() {
       localSteps.value[currentStepIndex].activities[currentActivityIndex] =
         updatedActivity;
 
-      // Update store
+      // Note: The store is already updated in the service, but we'll
+      // update it again here to ensure local UI state is consistent
       store.pathway.steps[currentStepIndex].activities[currentActivityIndex] = {
         name: regeneratedActivity.name,
         description: regeneratedActivity.description,
@@ -1254,6 +1288,10 @@ async function submitActivityRegeneration() {
         videoUrls: regeneratedActivity.videoUrls || [],
         quiz: regeneratedActivity.quiz || [],
       };
+
+      console.log(`Updated activity in local state and store`);
+    } else {
+      console.error(`Regeneration failed for activity:`, response);
     }
   } catch (error) {
     console.error("Error regenerating activity:", error);

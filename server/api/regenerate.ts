@@ -4,20 +4,80 @@ import axios from "axios";
 import { createError } from "h3";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY || "",
 });
 
 const pinecone = new Pinecone({
-  apiKey: process.env.PINECONE_API_KEY,
+  apiKey: process.env.PINECONE_API_KEY || "",
 });
 
-const index = pinecone.index(process.env.PINECONE_INDEX_NAME);
+const index = process.env.PINECONE_INDEX_NAME
+  ? pinecone.index(process.env.PINECONE_INDEX_NAME)
+  : pinecone.index("default-index"); // Fallback index name
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3/search";
 
+// Define types
+interface YouTubeVideo {
+  title: string;
+  url: string;
+  description: string;
+}
+
+interface ChunkMetadata {
+  document: string;
+  page: string | number;
+}
+
+interface RelevantChunk {
+  text: string;
+  metadata: ChunkMetadata;
+}
+
+interface QuizQuestion {
+  question: string;
+  type: "subjective" | "objective";
+  options?: string[];
+  correctOptions?: string[];
+  points: number;
+}
+
+interface Activity {
+  name: string;
+  description: string;
+  readData?: string;
+  pdfUrls?: string[];
+  videoUrls?: string[];
+  quiz?: QuizQuestion[];
+}
+
+interface Step {
+  name: string;
+  description: string;
+  activities: Activity[];
+}
+
+interface Pathway {
+  name: string;
+  description: string;
+  steps: Step[];
+  metadata?: {
+    sources?: ChunkMetadata[];
+    youtubeVideos?: YouTubeVideo[];
+  };
+}
+
+interface RegenerateRequest {
+  pathway: Pathway;
+  itemType: "step" | "activity";
+  itemIndex: number;
+  activityIndex?: number;
+  regenerationPrompt: string;
+}
+
 // Helper function to query YouTube
-async function queryYouTube(query) {
+async function queryYouTube(query: string): Promise<YouTubeVideo[]> {
   try {
     const response = await axios.get(YOUTUBE_API_URL, {
       params: {
@@ -30,7 +90,7 @@ async function queryYouTube(query) {
     });
 
     // Map relevant fields
-    return response.data.items.map((item) => ({
+    return response.data.items.map((item: any) => ({
       title: item.snippet.title,
       url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
       description: item.snippet.description,
@@ -43,7 +103,7 @@ async function queryYouTube(query) {
 
 export default defineEventHandler(async (event) => {
   try {
-    const body = await readBody(event);
+    const body = await readBody<RegenerateRequest>(event);
     const { pathway, itemType, itemIndex, activityIndex, regenerationPrompt } =
       body;
 
@@ -72,13 +132,15 @@ export default defineEventHandler(async (event) => {
     });
 
     // Extract chunks from Pinecone results
-    const relevantChunks = queryResponse.matches.map((match) => ({
-      text: match.metadata.content,
-      metadata: {
-        document: match.metadata.pdf_name,
-        page: match.metadata.page_number,
-      },
-    }));
+    const relevantChunks: RelevantChunk[] = queryResponse.matches.map(
+      (match: any) => ({
+        text: match.metadata.content,
+        metadata: {
+          document: match.metadata.pdf_name,
+          page: match.metadata.page_number,
+        },
+      })
+    );
 
     // Query YouTube for relevant videos if needed
     const youtubeResults = await queryYouTube(queryText);
@@ -98,17 +160,27 @@ export default defineEventHandler(async (event) => {
         INSTRUCTIONS:
         1. Create a new step to replace the existing one based on the user's request.
         2. The step should have a name, description, and activities that fit within the overall pathway structure.
-        3. Maintain consistency with the other steps in the pathway.
-        4. Include a variety of activity types as appropriate (reading materials, PDFs, videos, quizzes).
+        3. Each activity must have a name and description.
+        4. For reading activities, include relevant text in the "readData" field.
+        5. If an activity should link to a PDF document, include URLs in the "pdfUrls" array.
+        6. For video activities, include relevant YouTube URLs in the "videoUrls" array.
+        7. For quiz activities, create appropriate questions in the "quiz" array.
+           - Each question should have a "type" field with either "subjective" (open-ended) or "objective" (multiple choice).
+           - For objective questions, include "options" array with possible answers and "correctOptions" array with the correct answers.
+           - Assign appropriate "points" value for each question.
+        
+        CURRENT STEP TO REPLACE:
+        ${JSON.stringify(pathway.steps[itemIndex], null, 2)}
         
         CONTEXT:
+        Use the following context to create the new step:
         ${relevantChunks
           .map(
             (chunk) =>
               `${chunk.text} (Document: ${chunk.metadata.document}, Page: ${chunk.metadata.page})`
           )
           .join("\n")}
-          
+
         YOUTUBE VIDEOS:
         ${youtubeResults
           .map(
@@ -121,7 +193,7 @@ export default defineEventHandler(async (event) => {
       functions = [
         {
           name: "generateStep",
-          description: "Generates a replacement step for a learning pathway.",
+          description: "Generates a new step for the learning pathway.",
           parameters: {
             type: "object",
             properties: {
@@ -215,51 +287,74 @@ export default defineEventHandler(async (event) => {
           },
         },
       ];
+    } else if (itemType === "activity") {
+      // Regenerate a single activity
+      if (
+        activityIndex === undefined ||
+        activityIndex < 0 ||
+        activityIndex >= pathway.steps[itemIndex].activities.length
+      ) {
+        console.error(
+          `Invalid activity index: ${activityIndex} for step ${itemIndex}`
+        );
+        console.log(
+          `Step has ${
+            pathway.steps[itemIndex]?.activities?.length || 0
+          } activities`
+        );
 
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [{ role: "system", content: systemPrompt }],
-        functions,
-        function_call: { name: "generateStep" },
-        temperature: 0.7,
-      });
+        return createError({
+          statusCode: 400,
+          statusMessage: "Invalid activity index",
+        });
+      }
 
-      // Parse the function call response
-      const generatedStep = JSON.parse(
-        completion.choices[0].message.function_call.arguments
+      console.log(
+        `Regenerating activity at index ${activityIndex} in step ${itemIndex}`
+      );
+      console.log(
+        `Current activity:`,
+        JSON.stringify(
+          pathway.steps[itemIndex].activities[activityIndex]
+        ).substring(0, 200) + "..."
       );
 
-      return {
-        success: true,
-        regeneratedItem: generatedStep,
-      };
-    } else if (itemType === "activity") {
-      // Get the current step for context
-      const step = pathway.steps[itemIndex];
-
-      // Regenerate an activity
       systemPrompt = `
         Your role is to regenerate an activity in a learning pathway step based on user feedback.
         
         Current Pathway: ${pathway.name}
-        Step Name: ${step.name}
-        Step Description: ${step.description}
+        Pathway Description: ${pathway.description}
+        Current Step: ${pathway.steps[itemIndex].name}
+        Step Description: ${pathway.steps[itemIndex].description}
         User's regeneration request: ${regenerationPrompt}
         
         INSTRUCTIONS:
         1. Create a new activity to replace the existing one based on the user's request.
-        2. The activity should fit within the current step and overall pathway structure.
-        3. Be creative and consider different types of learning materials (reading content, PDFs, videos, quizzes).
-        4. If creating quiz questions, make them challenging and educational.
+        2. The activity must have a name and description.
+        3. For reading activities, include relevant text in the "readData" field.
+        4. If the activity should link to a PDF document, include URLs in the "pdfUrls" array.
+        5. For video activities, include relevant YouTube URLs in the "videoUrls" array.
+        6. For quiz activities, create appropriate questions in the "quiz" array.
+           - Each question should have a "type" field with either "subjective" (open-ended) or "objective" (multiple choice).
+           - For objective questions, include "options" array with possible answers and "correctOptions" array with the correct answers.
+           - Assign appropriate "points" value for each question.
+        
+        CURRENT ACTIVITY TO REPLACE:
+        ${JSON.stringify(
+          pathway.steps[itemIndex].activities[activityIndex],
+          null,
+          2
+        )}
         
         CONTEXT:
+        Use the following context to create the new activity:
         ${relevantChunks
           .map(
             (chunk) =>
               `${chunk.text} (Document: ${chunk.metadata.document}, Page: ${chunk.metadata.page})`
           )
           .join("\n")}
-          
+
         YOUTUBE VIDEOS:
         ${youtubeResults
           .map(
@@ -273,7 +368,7 @@ export default defineEventHandler(async (event) => {
         {
           name: "generateActivity",
           description:
-            "Generates a replacement activity for a learning pathway step.",
+            "Generates a new activity for a step in the learning pathway.",
           parameters: {
             type: "object",
             properties: {
@@ -349,30 +444,94 @@ export default defineEventHandler(async (event) => {
           },
         },
       ];
-
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [{ role: "system", content: systemPrompt }],
-        functions,
-        function_call: { name: "generateActivity" },
-        temperature: 0.7,
-      });
-
-      // Parse the function call response
-      const generatedActivity = JSON.parse(
-        completion.choices[0].message.function_call.arguments
-      );
-
-      return {
-        success: true,
-        regeneratedItem: generatedActivity,
-      };
     } else {
       return createError({
         statusCode: 400,
-        statusMessage: "Invalid item type for regeneration",
+        statusMessage: "Invalid item type",
       });
     }
+
+    // Make the OpenAI API call
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "system", content: systemPrompt }],
+      functions,
+      function_call: {
+        name: itemType === "step" ? "generateStep" : "generateActivity",
+      },
+      temperature: 0.7,
+    });
+
+    // Parse the function call response
+    const functionResponse = JSON.parse(
+      completion.choices[0].message.function_call?.arguments || "{}"
+    );
+
+    console.log(
+      "Function response:",
+      JSON.stringify(functionResponse).substring(0, 200) + "..."
+    );
+
+    // Validate the response
+    if (!functionResponse || typeof functionResponse !== "object") {
+      console.error("Invalid function response:", functionResponse);
+      return createError({
+        statusCode: 500,
+        statusMessage: "Invalid response from AI model",
+      });
+    }
+
+    if (
+      itemType === "step" &&
+      (!functionResponse.name ||
+        !functionResponse.description ||
+        !Array.isArray(functionResponse.activities))
+    ) {
+      console.error("Invalid step structure in response:", functionResponse);
+      return createError({
+        statusCode: 500,
+        statusMessage: "Invalid step structure in AI response",
+      });
+    }
+
+    if (
+      itemType === "activity" &&
+      (!functionResponse.name || !functionResponse.description)
+    ) {
+      console.error(
+        "Invalid activity structure in response:",
+        functionResponse
+      );
+      return createError({
+        statusCode: 500,
+        statusMessage: "Invalid activity structure in AI response",
+      });
+    }
+
+    // Clone the pathway to avoid mutating the original
+    const updatedPathway = JSON.parse(JSON.stringify(pathway)) as Pathway;
+
+    // Update the pathway with the regenerated content
+    if (itemType === "step") {
+      updatedPathway.steps[itemIndex] = functionResponse as Step;
+    } else {
+      // It's an activity
+      updatedPathway.steps[itemIndex].activities[activityIndex!] =
+        functionResponse as Activity;
+    }
+
+    const response = {
+      success: true,
+      updatedPathway,
+      regeneratedItem: functionResponse,
+    };
+
+    console.log(
+      "Regeneration response:",
+      JSON.stringify(response).substring(0, 200) + "..."
+    );
+
+    return response;
   } catch (error) {
     console.error("Error regenerating content:", error);
     return createError({

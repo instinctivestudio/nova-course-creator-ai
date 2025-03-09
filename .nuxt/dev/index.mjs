@@ -827,17 +827,17 @@ const errorHandler = (async function errorhandler(error, event) {
   return send(event, html);
 });
 
-const _lazy_Ph0naV = () => Promise.resolve().then(function () { return auth$1; });
-const _lazy_tZ6N5j = () => Promise.resolve().then(function () { return pathwayDetails$1; });
-const _lazy_5jQRmV = () => Promise.resolve().then(function () { return pathway$1; });
-const _lazy_Q5LmhC = () => Promise.resolve().then(function () { return regenerate$1; });
+const _lazy_coVCtl = () => Promise.resolve().then(function () { return auth$1; });
+const _lazy_knsKZN = () => Promise.resolve().then(function () { return pathwayDetails$1; });
+const _lazy_O2WQS1 = () => Promise.resolve().then(function () { return pathway$1; });
+const _lazy_038Saz = () => Promise.resolve().then(function () { return regenerate$1; });
 const _lazy_zVUUBM = () => Promise.resolve().then(function () { return renderer$1; });
 
 const handlers = [
-  { route: '/api/auth', handler: _lazy_Ph0naV, lazy: true, middleware: false, method: undefined },
-  { route: '/api/pathway-details', handler: _lazy_tZ6N5j, lazy: true, middleware: false, method: undefined },
-  { route: '/api/pathway', handler: _lazy_5jQRmV, lazy: true, middleware: false, method: undefined },
-  { route: '/api/regenerate', handler: _lazy_Q5LmhC, lazy: true, middleware: false, method: undefined },
+  { route: '/api/auth', handler: _lazy_coVCtl, lazy: true, middleware: false, method: undefined },
+  { route: '/api/pathway-details', handler: _lazy_knsKZN, lazy: true, middleware: false, method: undefined },
+  { route: '/api/pathway', handler: _lazy_O2WQS1, lazy: true, middleware: false, method: undefined },
+  { route: '/api/regenerate', handler: _lazy_038Saz, lazy: true, middleware: false, method: undefined },
   { route: '/__nuxt_error', handler: _lazy_zVUUBM, lazy: true, middleware: false, method: undefined },
   { route: '/**', handler: _lazy_zVUUBM, lazy: true, middleware: false, method: undefined }
 ];
@@ -1071,7 +1071,7 @@ const auth$1 = /*#__PURE__*/Object.freeze({
 });
 
 const openai$2 = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY || ""
 });
 const pathwayDetails = defineEventHandler(async (event) => {
   var _a, _b;
@@ -1161,12 +1161,12 @@ const pathwayDetails$1 = /*#__PURE__*/Object.freeze({
 });
 
 const openai$1 = new OpenAI$1({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY || ""
 });
 const pinecone$1 = new Pinecone({
-  apiKey: process.env.PINECONE_API_KEY
+  apiKey: process.env.PINECONE_API_KEY || ""
 });
-const index$1 = pinecone$1.index(process.env.PINECONE_INDEX_NAME);
+const index$1 = process.env.PINECONE_INDEX_NAME ? pinecone$1.index(process.env.PINECONE_INDEX_NAME) : pinecone$1.index("default-index");
 const YOUTUBE_API_KEY$1 = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_API_URL$1 = "https://www.googleapis.com/youtube/v3/search";
 async function queryYouTube$1(query) {
@@ -1192,6 +1192,7 @@ async function queryYouTube$1(query) {
   }
 }
 const pathway = defineEventHandler(async (event) => {
+  var _a;
   const query = getQuery$1(event);
   const {
     pathway_name,
@@ -1218,13 +1219,15 @@ const pathway = defineEventHandler(async (event) => {
       topK: 20,
       includeMetadata: true
     });
-    const relevantChunks = queryResponse.matches.map((match) => ({
-      text: match.metadata.content,
-      metadata: {
-        document: match.metadata.pdf_name,
-        page: match.metadata.page_number
-      }
-    }));
+    const relevantChunks = queryResponse.matches.map(
+      (match) => ({
+        text: match.metadata.content,
+        metadata: {
+          document: match.metadata.pdf_name,
+          page: match.metadata.page_number
+        }
+      })
+    );
     const youtubeResults = await queryYouTube$1(
       `${pathway_name} ${pathway_overview}`
     );
@@ -1383,9 +1386,9 @@ Description: ${video.description}`
       temperature: 0.8
     });
     const functionResponse = JSON.parse(
-      completion.choices[0].message.function_call.arguments
+      ((_a = completion.choices[0].message.function_call) == null ? void 0 : _a.arguments) || "{}"
     );
-    return {
+    const result = {
       name: pathway_name,
       description: pathway_overview,
       steps: functionResponse.steps,
@@ -1394,6 +1397,11 @@ Description: ${video.description}`
         youtubeVideos: youtubeResults
       }
     };
+    console.log(
+      "Returning pathway from API:",
+      JSON.stringify(result).substring(0, 200) + "..."
+    );
+    return result;
   } catch (error) {
     console.error("Error generating pathway:", error);
     return createError({
@@ -1409,12 +1417,12 @@ const pathway$1 = /*#__PURE__*/Object.freeze({
 });
 
 const openai = new OpenAI$1({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY || ""
 });
 const pinecone = new Pinecone({
-  apiKey: process.env.PINECONE_API_KEY
+  apiKey: process.env.PINECONE_API_KEY || ""
 });
-const index = pinecone.index(process.env.PINECONE_INDEX_NAME);
+const index = process.env.PINECONE_INDEX_NAME ? pinecone.index(process.env.PINECONE_INDEX_NAME) : pinecone.index("default-index");
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3/search";
 async function queryYouTube(query) {
@@ -1440,6 +1448,7 @@ async function queryYouTube(query) {
   }
 }
 const regenerate = defineEventHandler(async (event) => {
+  var _a, _b, _c;
   try {
     const body = await readBody(event);
     const { pathway, itemType, itemIndex, activityIndex, regenerationPrompt } = body;
@@ -1461,13 +1470,15 @@ const regenerate = defineEventHandler(async (event) => {
       topK: 15,
       includeMetadata: true
     });
-    const relevantChunks = queryResponse.matches.map((match) => ({
-      text: match.metadata.content,
-      metadata: {
-        document: match.metadata.pdf_name,
-        page: match.metadata.page_number
-      }
-    }));
+    const relevantChunks = queryResponse.matches.map(
+      (match) => ({
+        text: match.metadata.content,
+        metadata: {
+          document: match.metadata.pdf_name,
+          page: match.metadata.page_number
+        }
+      })
+    );
     const youtubeResults = await queryYouTube(queryText);
     let systemPrompt = "";
     let functions;
@@ -1482,14 +1493,24 @@ const regenerate = defineEventHandler(async (event) => {
         INSTRUCTIONS:
         1. Create a new step to replace the existing one based on the user's request.
         2. The step should have a name, description, and activities that fit within the overall pathway structure.
-        3. Maintain consistency with the other steps in the pathway.
-        4. Include a variety of activity types as appropriate (reading materials, PDFs, videos, quizzes).
+        3. Each activity must have a name and description.
+        4. For reading activities, include relevant text in the "readData" field.
+        5. If an activity should link to a PDF document, include URLs in the "pdfUrls" array.
+        6. For video activities, include relevant YouTube URLs in the "videoUrls" array.
+        7. For quiz activities, create appropriate questions in the "quiz" array.
+           - Each question should have a "type" field with either "subjective" (open-ended) or "objective" (multiple choice).
+           - For objective questions, include "options" array with possible answers and "correctOptions" array with the correct answers.
+           - Assign appropriate "points" value for each question.
+        
+        CURRENT STEP TO REPLACE:
+        ${JSON.stringify(pathway.steps[itemIndex], null, 2)}
         
         CONTEXT:
+        Use the following context to create the new step:
         ${relevantChunks.map(
         (chunk) => `${chunk.text} (Document: ${chunk.metadata.document}, Page: ${chunk.metadata.page})`
       ).join("\n")}
-          
+
         YOUTUBE VIDEOS:
         ${youtubeResults.map(
         (video) => `${video.title}: ${video.url}
@@ -1499,7 +1520,7 @@ Description: ${video.description}`
       functions = [
         {
           name: "generateStep",
-          description: "Generates a replacement step for a learning pathway.",
+          description: "Generates a new step for the learning pathway.",
           parameters: {
             type: "object",
             properties: {
@@ -1589,41 +1610,61 @@ Description: ${video.description}`
           }
         }
       ];
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [{ role: "system", content: systemPrompt }],
-        functions,
-        function_call: { name: "generateStep" },
-        temperature: 0.7
-      });
-      const generatedStep = JSON.parse(
-        completion.choices[0].message.function_call.arguments
-      );
-      return {
-        success: true,
-        regeneratedItem: generatedStep
-      };
     } else if (itemType === "activity") {
-      const step = pathway.steps[itemIndex];
+      if (activityIndex === void 0 || activityIndex < 0 || activityIndex >= pathway.steps[itemIndex].activities.length) {
+        console.error(
+          `Invalid activity index: ${activityIndex} for step ${itemIndex}`
+        );
+        console.log(
+          `Step has ${((_b = (_a = pathway.steps[itemIndex]) == null ? void 0 : _a.activities) == null ? void 0 : _b.length) || 0} activities`
+        );
+        return createError({
+          statusCode: 400,
+          statusMessage: "Invalid activity index"
+        });
+      }
+      console.log(
+        `Regenerating activity at index ${activityIndex} in step ${itemIndex}`
+      );
+      console.log(
+        `Current activity:`,
+        JSON.stringify(
+          pathway.steps[itemIndex].activities[activityIndex]
+        ).substring(0, 200) + "..."
+      );
       systemPrompt = `
         Your role is to regenerate an activity in a learning pathway step based on user feedback.
         
         Current Pathway: ${pathway.name}
-        Step Name: ${step.name}
-        Step Description: ${step.description}
+        Pathway Description: ${pathway.description}
+        Current Step: ${pathway.steps[itemIndex].name}
+        Step Description: ${pathway.steps[itemIndex].description}
         User's regeneration request: ${regenerationPrompt}
         
         INSTRUCTIONS:
         1. Create a new activity to replace the existing one based on the user's request.
-        2. The activity should fit within the current step and overall pathway structure.
-        3. Be creative and consider different types of learning materials (reading content, PDFs, videos, quizzes).
-        4. If creating quiz questions, make them challenging and educational.
+        2. The activity must have a name and description.
+        3. For reading activities, include relevant text in the "readData" field.
+        4. If the activity should link to a PDF document, include URLs in the "pdfUrls" array.
+        5. For video activities, include relevant YouTube URLs in the "videoUrls" array.
+        6. For quiz activities, create appropriate questions in the "quiz" array.
+           - Each question should have a "type" field with either "subjective" (open-ended) or "objective" (multiple choice).
+           - For objective questions, include "options" array with possible answers and "correctOptions" array with the correct answers.
+           - Assign appropriate "points" value for each question.
+        
+        CURRENT ACTIVITY TO REPLACE:
+        ${JSON.stringify(
+        pathway.steps[itemIndex].activities[activityIndex],
+        null,
+        2
+      )}
         
         CONTEXT:
+        Use the following context to create the new activity:
         ${relevantChunks.map(
         (chunk) => `${chunk.text} (Document: ${chunk.metadata.document}, Page: ${chunk.metadata.page})`
       ).join("\n")}
-          
+
         YOUTUBE VIDEOS:
         ${youtubeResults.map(
         (video) => `${video.title}: ${video.url}
@@ -1633,7 +1674,7 @@ Description: ${video.description}`
       functions = [
         {
           name: "generateActivity",
-          description: "Generates a replacement activity for a learning pathway step.",
+          description: "Generates a new activity for a step in the learning pathway.",
           parameters: {
             type: "object",
             properties: {
@@ -1705,26 +1746,68 @@ Description: ${video.description}`
           }
         }
       ];
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [{ role: "system", content: systemPrompt }],
-        functions,
-        function_call: { name: "generateActivity" },
-        temperature: 0.7
-      });
-      const generatedActivity = JSON.parse(
-        completion.choices[0].message.function_call.arguments
-      );
-      return {
-        success: true,
-        regeneratedItem: generatedActivity
-      };
     } else {
       return createError({
         statusCode: 400,
-        statusMessage: "Invalid item type for regeneration"
+        statusMessage: "Invalid item type"
       });
     }
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [{ role: "system", content: systemPrompt }],
+      functions,
+      function_call: {
+        name: itemType === "step" ? "generateStep" : "generateActivity"
+      },
+      temperature: 0.7
+    });
+    const functionResponse = JSON.parse(
+      ((_c = completion.choices[0].message.function_call) == null ? void 0 : _c.arguments) || "{}"
+    );
+    console.log(
+      "Function response:",
+      JSON.stringify(functionResponse).substring(0, 200) + "..."
+    );
+    if (!functionResponse || typeof functionResponse !== "object") {
+      console.error("Invalid function response:", functionResponse);
+      return createError({
+        statusCode: 500,
+        statusMessage: "Invalid response from AI model"
+      });
+    }
+    if (itemType === "step" && (!functionResponse.name || !functionResponse.description || !Array.isArray(functionResponse.activities))) {
+      console.error("Invalid step structure in response:", functionResponse);
+      return createError({
+        statusCode: 500,
+        statusMessage: "Invalid step structure in AI response"
+      });
+    }
+    if (itemType === "activity" && (!functionResponse.name || !functionResponse.description)) {
+      console.error(
+        "Invalid activity structure in response:",
+        functionResponse
+      );
+      return createError({
+        statusCode: 500,
+        statusMessage: "Invalid activity structure in AI response"
+      });
+    }
+    const updatedPathway = JSON.parse(JSON.stringify(pathway));
+    if (itemType === "step") {
+      updatedPathway.steps[itemIndex] = functionResponse;
+    } else {
+      updatedPathway.steps[itemIndex].activities[activityIndex] = functionResponse;
+    }
+    const response = {
+      success: true,
+      updatedPathway,
+      regeneratedItem: functionResponse
+    };
+    console.log(
+      "Regeneration response:",
+      JSON.stringify(response).substring(0, 200) + "..."
+    );
+    return response;
   } catch (error) {
     console.error("Error regenerating content:", error);
     return createError({

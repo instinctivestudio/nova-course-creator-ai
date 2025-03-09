@@ -2,12 +2,24 @@ import { OpenAI } from "openai";
 import { createError } from "h3";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY || "",
 });
+
+interface PathwayDetailsRequest {
+  prompt: string;
+}
+
+interface PathwayDetails {
+  title: string;
+  description: string;
+  learningOutcomes: string;
+  targetAudience: string;
+  whyTakeIt: string;
+}
 
 export default defineEventHandler(async (event) => {
   try {
-    const body = await readBody(event);
+    const body = await readBody<PathwayDetailsRequest>(event);
     const { prompt } = body;
 
     if (!prompt) {
@@ -85,7 +97,7 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    const pathwayDetails = JSON.parse(functionCall.arguments);
+    const pathwayDetails = JSON.parse(functionCall.arguments) as PathwayDetails;
 
     return pathwayDetails;
   } catch (error) {
