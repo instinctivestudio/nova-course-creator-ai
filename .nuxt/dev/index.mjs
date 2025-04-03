@@ -1245,7 +1245,7 @@ const pathway = defineEventHandler(async (event) => {
       2. Each Activity must have a name and description.
       3. For reading activities, include relevant text in the "readData" field.
       4. If an Activity should link to a PDF document, include URLs in the "pdfUrls" array.
-      5. For video activities, include relevant YouTube URLs in the "videoUrls" array.
+      5. For video activities, ONLY USE THE EXACT YouTube URLs listed below in the "videoUrls" array. DO NOT generate your own YouTube URLs or placeholders.
       6. For quiz activities, create appropriate questions in the "quiz" array. 
          - Each question should have a "type" field with either "subjective" (open-ended) or "objective" (multiple choice).
          - For objective questions, include "options" array with possible answers and "correctOptions" array with the correct answers.
@@ -1253,6 +1253,7 @@ const pathway = defineEventHandler(async (event) => {
       7. Don't include step numbers in names like "Step 1", "Step 2", etc. Just use descriptive titles.
       8. Include sources where relevant, and format document names to be reader-friendly.
       9. Each pathway should have 5-7 steps, with 3-4 activities per step.
+      10. IMPORTANT: For any video-based activities, you MUST ONLY use the exact YouTube URLs provided below. DO NOT create your own URLs.
 
       CONTEXT:
       Use the following context to generate the pathway steps and activities:
@@ -1260,11 +1261,14 @@ const pathway = defineEventHandler(async (event) => {
       (chunk) => `${chunk.text} (Document: ${chunk.metadata.document}, Page: ${chunk.metadata.page})`
     ).join("\n")}
 
-      YOUTUBE VIDEOS:
+      YOUTUBE VIDEOS - USE ONLY THESE EXACT URLS FOR VIDEO ACTIVITIES:
       ${youtubeResults.map(
-      (video) => `${video.title}: ${video.url}
+      (video) => `Title: ${video.title}
+URL: ${video.url}
 Description: ${video.description}`
-    ).join("\n")}
+    ).join("\n\n")}
+        
+      YOU MUST ONLY USE THESE EXACT YOUTUBE URLS IN YOUR GENERATED CONTENT. DO NOT CREATE YOUR OWN URLs.
     `;
     const functions = [
       {
@@ -1388,6 +1392,7 @@ Description: ${video.description}`
     const functionResponse = JSON.parse(
       ((_a = completion.choices[0].message.function_call) == null ? void 0 : _a.arguments) || "{}"
     );
+    processPathwayYouTubeURLs(functionResponse, youtubeResults);
     const result = {
       name: pathway_name,
       description: pathway_overview,
@@ -1410,6 +1415,34 @@ Description: ${video.description}`
     });
   }
 });
+function processPathwayYouTubeURLs(pathway, youtubeVideos) {
+  const validYouTubeUrls = /* @__PURE__ */ new Map();
+  youtubeVideos.forEach((video) => {
+    validYouTubeUrls.set(video.url, video);
+  });
+  const isValidYouTubeUrl = (url) => {
+    return validYouTubeUrls.has(url);
+  };
+  pathway.steps.forEach((step) => {
+    step.activities.forEach((activity) => {
+      if (!activity.videoUrls || activity.videoUrls.length === 0) {
+        return;
+      }
+      const validUrls = activity.videoUrls.filter(
+        (url) => isValidYouTubeUrl(url)
+      );
+      if (validUrls.length === 0 && youtubeVideos.length > 0) {
+        activity.videoUrls = [youtubeVideos[0].url];
+        activity.youtubeVideos = [youtubeVideos[0]];
+      } else {
+        activity.videoUrls = validUrls;
+        activity.youtubeVideos = validUrls.map(
+          (url) => validYouTubeUrls.get(url)
+        );
+      }
+    });
+  });
+}
 
 const pathway$1 = /*#__PURE__*/Object.freeze({
   __proto__: null,
@@ -1665,11 +1698,14 @@ Description: ${video.description}`
         (chunk) => `${chunk.text} (Document: ${chunk.metadata.document}, Page: ${chunk.metadata.page})`
       ).join("\n")}
 
-        YOUTUBE VIDEOS:
+        YOUTUBE VIDEOS - USE ONLY THESE EXACT URLS FOR VIDEO ACTIVITIES:
         ${youtubeResults.map(
-        (video) => `${video.title}: ${video.url}
+        (video) => `Title: ${video.title}
+URL: ${video.url}
 Description: ${video.description}`
-      ).join("\n")}
+      ).join("\n\n")}
+          
+        IMPORTANT: For any video-based activities, you MUST ONLY use the exact YouTube URLs provided above. DO NOT create or invent URLs.
       `;
       functions = [
         {
@@ -1792,6 +1828,11 @@ Description: ${video.description}`
         statusMessage: "Invalid activity structure in AI response"
       });
     }
+    if (itemType === "step") {
+      processStepYouTubeURLs(functionResponse, youtubeResults);
+    } else {
+      processActivityYouTubeURLs(functionResponse, youtubeResults);
+    }
     const updatedPathway = JSON.parse(JSON.stringify(pathway));
     if (itemType === "step") {
       updatedPathway.steps[itemIndex] = functionResponse;
@@ -1816,6 +1857,35 @@ Description: ${video.description}`
     });
   }
 });
+function processStepYouTubeURLs(step, youtubeVideos) {
+  const validYouTubeUrls = /* @__PURE__ */ new Map();
+  youtubeVideos.forEach((video) => {
+    validYouTubeUrls.set(video.url, video);
+  });
+  step.activities.forEach((activity) => {
+    processActivityYouTubeURLs(activity, youtubeVideos);
+  });
+}
+function processActivityYouTubeURLs(activity, youtubeVideos) {
+  const validYouTubeUrls = /* @__PURE__ */ new Map();
+  youtubeVideos.forEach((video) => {
+    validYouTubeUrls.set(video.url, video);
+  });
+  const isValidYouTubeUrl = (url) => {
+    return validYouTubeUrls.has(url);
+  };
+  if (!activity.videoUrls || activity.videoUrls.length === 0) {
+    return;
+  }
+  const validUrls = activity.videoUrls.filter((url) => isValidYouTubeUrl(url));
+  if (validUrls.length === 0 && youtubeVideos.length > 0) {
+    activity.videoUrls = [youtubeVideos[0].url];
+    activity.youtubeVideos = [youtubeVideos[0]];
+  } else {
+    activity.videoUrls = validUrls;
+    activity.youtubeVideos = validUrls.map((url) => validYouTubeUrls.get(url));
+  }
+}
 
 const regenerate$1 = /*#__PURE__*/Object.freeze({
   __proto__: null,

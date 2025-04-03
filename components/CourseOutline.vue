@@ -782,7 +782,7 @@ interface QuizQuestion {
   type: "subjective" | "objective";
   options?: string[];
   correctOptions?: string[];
-  points?: number;
+  points: number;
   _id?: string;
 }
 
@@ -831,7 +831,12 @@ onMounted(() => {
       readData: activity.readData,
       pdfUrls: activity.pdfUrls,
       videoUrls: activity.videoUrls,
-      quiz: activity.quiz ? cloneDeep(activity.quiz) : [],
+      quiz: activity.quiz
+        ? cloneDeep(activity.quiz).map((q) => ({
+            ...q,
+            points: q.points || 1,
+          }))
+        : [],
       isRegenerating: false,
     })),
     isExpanded: true,
@@ -1051,6 +1056,24 @@ const getPdfFileName = (url: string) => {
 };
 
 const getVideoTitle = (url: string, index: number) => {
+  // First, look for the activity containing this URL across all steps
+  for (const step of localSteps.value) {
+    for (const activity of step.activities) {
+      if (
+        activity.videoUrls?.includes(url) &&
+        (activity as any).youtubeVideos
+      ) {
+        // Find the matching YouTube video metadata
+        const videoMetadata = (activity as any).youtubeVideos.find(
+          (v: any) => v.url === url
+        );
+        if (videoMetadata && videoMetadata.title) {
+          return videoMetadata.title;
+        }
+      }
+    }
+  }
+
   // Extract video title from YouTube URL if possible
   const ytMatch = url.match(
     /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/
@@ -1150,8 +1173,23 @@ async function submitStepRegeneration() {
       regeneratePrompt.value
     );
 
+    // Create a clean copy of pathway with proper types
+    const pathwayCopy = {
+      ...store.pathway,
+      steps: store.pathway.steps.map((step) => ({
+        ...step,
+        activities: step.activities.map((activity) => ({
+          ...activity,
+          quiz: activity.quiz?.map((q) => ({
+            ...q,
+            points: q.points || 1,
+          })),
+        })),
+      })),
+    };
+
     const response = (await regenerateContent({
-      pathway: store.pathway,
+      pathway: pathwayCopy,
       itemType: "step",
       itemIndex: stepIndex,
       regenerationPrompt: regeneratePrompt.value,
@@ -1173,6 +1211,10 @@ async function submitStepRegeneration() {
             ...activity,
             id: `activity-${stepIndex}-${activityIndex}`,
             isRegenerating: false,
+            quiz: activity.quiz?.map((q) => ({
+              ...q,
+              points: q.points || 1,
+            })),
           })
         ) || [];
 
@@ -1197,7 +1239,10 @@ async function submitStepRegeneration() {
           readData: a.readData,
           pdfUrls: a.pdfUrls,
           videoUrls: a.videoUrls,
-          quiz: a.quiz,
+          quiz: a.quiz?.map((q) => ({
+            ...q,
+            points: q.points || 1,
+          })),
         })),
       };
     } else {
@@ -1249,8 +1294,23 @@ async function submitActivityRegeneration() {
       regeneratePrompt.value
     );
 
+    // Create a clean copy of pathway with proper types
+    const pathwayCopy = {
+      ...store.pathway,
+      steps: store.pathway.steps.map((step) => ({
+        ...step,
+        activities: step.activities.map((activity) => ({
+          ...activity,
+          quiz: activity.quiz?.map((q) => ({
+            ...q,
+            points: q.points || 1,
+          })),
+        })),
+      })),
+    };
+
     const response = (await regenerateContent({
-      pathway: store.pathway,
+      pathway: pathwayCopy,
       itemType: "activity",
       itemIndex: currentStepIndex,
       activityIndex: currentActivityIndex,
@@ -1271,7 +1331,10 @@ async function submitActivityRegeneration() {
         readData: regeneratedActivity.readData,
         pdfUrls: regeneratedActivity.pdfUrls || [],
         videoUrls: regeneratedActivity.videoUrls || [],
-        quiz: regeneratedActivity.quiz || [],
+        quiz: (regeneratedActivity.quiz || []).map((q) => ({
+          ...q,
+          points: q.points || 1,
+        })),
         isRegenerating: false,
       };
 
@@ -1286,7 +1349,10 @@ async function submitActivityRegeneration() {
         readData: regeneratedActivity.readData,
         pdfUrls: regeneratedActivity.pdfUrls || [],
         videoUrls: regeneratedActivity.videoUrls || [],
-        quiz: regeneratedActivity.quiz || [],
+        quiz: (regeneratedActivity.quiz || []).map((q) => ({
+          ...q,
+          points: q.points || 1,
+        })),
       };
 
       console.log(`Updated activity in local state and store`);

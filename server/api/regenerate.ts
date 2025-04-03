@@ -50,6 +50,7 @@ interface Activity {
   pdfUrls?: string[];
   videoUrls?: string[];
   quiz?: QuizQuestion[];
+  youtubeVideos?: YouTubeVideo[];
 }
 
 interface Step {
@@ -355,13 +356,15 @@ export default defineEventHandler(async (event) => {
           )
           .join("\n")}
 
-        YOUTUBE VIDEOS:
+        YOUTUBE VIDEOS - USE ONLY THESE EXACT URLS FOR VIDEO ACTIVITIES:
         ${youtubeResults
           .map(
             (video) =>
-              `${video.title}: ${video.url}\nDescription: ${video.description}`
+              `Title: ${video.title}\nURL: ${video.url}\nDescription: ${video.description}`
           )
-          .join("\n")}
+          .join("\n\n")}
+          
+        IMPORTANT: For any video-based activities, you MUST ONLY use the exact YouTube URLs provided above. DO NOT create or invent URLs.
       `;
 
       functions = [
@@ -508,6 +511,14 @@ export default defineEventHandler(async (event) => {
       });
     }
 
+    // Process YouTube URLs in the regenerated content
+    if (itemType === "step") {
+      processStepYouTubeURLs(functionResponse as Step, youtubeResults);
+    } else {
+      // It's an activity
+      processActivityYouTubeURLs(functionResponse as Activity, youtubeResults);
+    }
+
     // Clone the pathway to avoid mutating the original
     const updatedPathway = JSON.parse(JSON.stringify(pathway)) as Pathway;
 
@@ -540,3 +551,54 @@ export default defineEventHandler(async (event) => {
     });
   }
 });
+
+// Helper function to process and fix YouTube URLs in a step
+function processStepYouTubeURLs(step: Step, youtubeVideos: YouTubeVideo[]) {
+  // Create a map of valid YouTube URLs for quick lookup
+  const validYouTubeUrls = new Map<string, YouTubeVideo>();
+  youtubeVideos.forEach((video) => {
+    validYouTubeUrls.set(video.url, video);
+  });
+
+  // Process each activity in the step
+  step.activities.forEach((activity) => {
+    processActivityYouTubeURLs(activity, youtubeVideos);
+  });
+}
+
+// Helper function to process and fix YouTube URLs in an activity
+function processActivityYouTubeURLs(
+  activity: Activity,
+  youtubeVideos: YouTubeVideo[]
+) {
+  // Create a map of valid YouTube URLs for quick lookup
+  const validYouTubeUrls = new Map<string, YouTubeVideo>();
+  youtubeVideos.forEach((video) => {
+    validYouTubeUrls.set(video.url, video);
+  });
+
+  // Helper to check if a URL is a valid YouTube URL from our results
+  const isValidYouTubeUrl = (url: string): boolean => {
+    return validYouTubeUrls.has(url);
+  };
+
+  // Skip if no videoUrls
+  if (!activity.videoUrls || activity.videoUrls.length === 0) {
+    return;
+  }
+
+  // Filter out invalid URLs
+  const validUrls = activity.videoUrls.filter((url) => isValidYouTubeUrl(url));
+
+  // If no valid URLs found but we had some URLs, replace with our first valid YouTube URL
+  if (validUrls.length === 0 && youtubeVideos.length > 0) {
+    activity.videoUrls = [youtubeVideos[0].url];
+    // Also add the youtubeVideos metadata
+    activity.youtubeVideos = [youtubeVideos[0]];
+  } else {
+    // Use only valid URLs
+    activity.videoUrls = validUrls;
+    // Add metadata for each valid URL
+    activity.youtubeVideos = validUrls.map((url) => validYouTubeUrls.get(url)!);
+  }
+}

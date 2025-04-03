@@ -3,8 +3,14 @@ export interface QuizQuestion {
   type: "subjective" | "objective";
   options?: string[];
   correctOptions?: string[];
-  points?: number;
+  points: number;
   _id?: string;
+}
+
+export interface YouTubeVideo {
+  title: string;
+  url: string;
+  description: string;
 }
 
 export interface Activity {
@@ -13,6 +19,7 @@ export interface Activity {
   readData?: string;
   pdfUrls?: string[];
   videoUrls?: string[];
+  youtubeVideos?: YouTubeVideo[];
   quiz?: QuizQuestion[];
 }
 
