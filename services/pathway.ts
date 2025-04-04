@@ -25,6 +25,14 @@ interface RegenerateResponse {
   regeneratedItem: Step | Activity;
 }
 
+// Helper function to get auth token
+const getAuthHeaders = () => {
+  const authToken = localStorage.getItem("authToken");
+  return {
+    Authorization: `Bearer ${authToken || ""}`,
+  };
+};
+
 export const generatePathway = async (
   params: PathwayQueryParams
 ): Promise<Pathway> => {
@@ -33,6 +41,7 @@ export const generatePathway = async (
 
     const { data, error } = await useFetch("/api/pathway", {
       params,
+      headers: getAuthHeaders(),
     });
 
     if (error.value) {
@@ -73,6 +82,7 @@ export const regenerateContent = async (
     const { data, error } = await useFetch("/api/regenerate", {
       method: "POST",
       body: params,
+      headers: getAuthHeaders(),
     });
 
     if (error.value) {

@@ -8,6 +8,14 @@ export interface PathwayDetails {
   whyTakeIt: string;
 }
 
+// Helper function to get auth token
+const getAuthHeaders = () => {
+  const authToken = localStorage.getItem("authToken");
+  return {
+    Authorization: `Bearer ${authToken || ""}`,
+  };
+};
+
 export const generatePathwayDetails = async (
   prompt: string
 ): Promise<PathwayDetails> => {
@@ -17,6 +25,7 @@ export const generatePathwayDetails = async (
       {
         method: "POST",
         body: { prompt },
+        headers: getAuthHeaders(),
       }
     );
 

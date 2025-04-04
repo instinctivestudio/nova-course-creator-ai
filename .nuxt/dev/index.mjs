@@ -1073,9 +1073,31 @@ const auth$1 = /*#__PURE__*/Object.freeze({
 const openai$2 = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || ""
 });
+const pinecone$2 = new Pinecone({
+  apiKey: process.env.PINECONE_API_KEY || ""
+});
+const index$2 = process.env.PINECONE_INDEX_NAME ? pinecone$2.index(process.env.PINECONE_INDEX_NAME) : pinecone$2.index("default-index");
+const checkAuth$2 = (event) => {
+  const authHeader = getRequestHeader(event, "Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    throw createError({
+      statusCode: 401,
+      message: "Unauthorized: Missing or invalid authentication token"
+    });
+  }
+  const token = authHeader.substring(7);
+  if (!token || !token.startsWith("valid_token_")) {
+    throw createError({
+      statusCode: 401,
+      message: "Unauthorized: Invalid authentication token"
+    });
+  }
+  return true;
+};
 const pathwayDetails = defineEventHandler(async (event) => {
   var _a, _b;
   try {
+    checkAuth$2(event);
     const body = await readBody(event);
     const { prompt } = body;
     if (!prompt) {
@@ -1084,13 +1106,45 @@ const pathwayDetails = defineEventHandler(async (event) => {
         message: "Prompt is required"
       });
     }
+    const embeddingResponse = await openai$2.embeddings.create({
+      model: "text-embedding-3-small",
+      input: prompt,
+      encoding_format: "float"
+    });
+    const queryEmbedding = embeddingResponse.data[0].embedding;
+    const queryResponse = await index$2.query({
+      vector: queryEmbedding,
+      topK: 15,
+      includeMetadata: true
+    });
+    const relevantChunks = queryResponse.matches.map(
+      (match) => ({
+        text: match.metadata.content,
+        metadata: {
+          document: match.metadata.pdf_name,
+          page: match.metadata.page_number
+        }
+      })
+    );
+    const contextText = relevantChunks.map(
+      (chunk) => `${chunk.text} (Document: ${chunk.metadata.document}, Page: ${chunk.metadata.page})`
+    ).join("\n\n");
+    console.log("Context text:", contextText);
     const response = await openai$2.chat.completions.create({
-      model: "gpt-4-turbo",
+      model: "gpt-4o",
       // Use your preferred model
       messages: [
         {
           role: "system",
-          content: "You are an assistant that helps create educational pathway details from natural language prompts."
+          content: `You are an assistant that helps create educational pathway details from natural language prompts. You are given a prompt and you need to generate a detailed pathway description, learning outcomes, target audience, and compelling reasons why someone should take the pathway.
+            The pathway description should be a comprehensive overview of what the pathway covers.
+            The learning outcomes should be specific skills or knowledge learners will gain from completing the pathway.
+            The target audience should be a description of who would benefit most from taking this pathway.
+            The compelling reasons why someone should take the pathway should be a list of reasons why someone should take the pathway.
+            
+            Use the following context from our knowledge base to inform your response:
+            ${contextText}
+            `
         },
         {
           role: "user",
@@ -1145,7 +1199,12 @@ const pathwayDetails = defineEventHandler(async (event) => {
       });
     }
     const pathwayDetails = JSON.parse(functionCall.arguments);
-    return pathwayDetails;
+    return {
+      ...pathwayDetails,
+      metadata: {
+        sources: relevantChunks.map((chunk) => chunk.metadata)
+      }
+    };
   } catch (error) {
     console.error("Error generating pathway details:", error);
     return createError({
@@ -1169,6 +1228,23 @@ const pinecone$1 = new Pinecone({
 const index$1 = process.env.PINECONE_INDEX_NAME ? pinecone$1.index(process.env.PINECONE_INDEX_NAME) : pinecone$1.index("default-index");
 const YOUTUBE_API_KEY$1 = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_API_URL$1 = "https://www.googleapis.com/youtube/v3/search";
+const checkAuth$1 = (event) => {
+  const authHeader = getRequestHeader(event, "Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    throw createError({
+      statusCode: 401,
+      message: "Unauthorized: Missing or invalid authentication token"
+    });
+  }
+  const token = authHeader.substring(7);
+  if (!token || !token.startsWith("valid_token_")) {
+    throw createError({
+      statusCode: 401,
+      message: "Unauthorized: Invalid authentication token"
+    });
+  }
+  return true;
+};
 async function queryYouTube$1(query) {
   try {
     const response = await axios.get(YOUTUBE_API_URL$1, {
@@ -1193,6 +1269,7 @@ async function queryYouTube$1(query) {
 }
 const pathway = defineEventHandler(async (event) => {
   var _a;
+  checkAuth$1(event);
   const query = getQuery$1(event);
   const {
     pathway_name,
@@ -1458,6 +1535,23 @@ const pinecone = new Pinecone({
 const index = process.env.PINECONE_INDEX_NAME ? pinecone.index(process.env.PINECONE_INDEX_NAME) : pinecone.index("default-index");
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3/search";
+const checkAuth = (event) => {
+  const authHeader = getRequestHeader(event, "Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    throw createError({
+      statusCode: 401,
+      message: "Unauthorized: Missing or invalid authentication token"
+    });
+  }
+  const token = authHeader.substring(7);
+  if (!token || !token.startsWith("valid_token_")) {
+    throw createError({
+      statusCode: 401,
+      message: "Unauthorized: Invalid authentication token"
+    });
+  }
+  return true;
+};
 async function queryYouTube(query) {
   try {
     const response = await axios.get(YOUTUBE_API_URL, {
@@ -1483,6 +1577,7 @@ async function queryYouTube(query) {
 const regenerate = defineEventHandler(async (event) => {
   var _a, _b, _c;
   try {
+    checkAuth(event);
     const body = await readBody(event);
     const { pathway, itemType, itemIndex, activityIndex, regenerationPrompt } = body;
     if (!pathway || !itemType || regenerationPrompt === void 0) {

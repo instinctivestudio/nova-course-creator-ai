@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { Pinecone } from "@pinecone-database/pinecone";
 import axios from "axios";
-import { createError } from "h3";
+import { createError, H3Event, getRequestHeader } from "h3";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || "",
@@ -17,6 +17,27 @@ const index = process.env.PINECONE_INDEX_NAME
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_API_URL = "https://www.googleapis.com/youtube/v3/search";
+
+// Helper function to check authentication
+const checkAuth = (event: H3Event) => {
+  const authHeader = getRequestHeader(event, "Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    throw createError({
+      statusCode: 401,
+      message: "Unauthorized: Missing or invalid authentication token",
+    });
+  }
+
+  const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+  if (!token || !token.startsWith("valid_token_")) {
+    throw createError({
+      statusCode: 401,
+      message: "Unauthorized: Invalid authentication token",
+    });
+  }
+
+  return true;
+};
 
 // Define types
 interface YouTubeVideo {
@@ -104,6 +125,9 @@ async function queryYouTube(query: string): Promise<YouTubeVideo[]> {
 
 export default defineEventHandler(async (event) => {
   try {
+    // Verify authentication before proceeding
+    checkAuth(event);
+
     const body = await readBody<RegenerateRequest>(event);
     const { pathway, itemType, itemIndex, activityIndex, regenerationPrompt } =
       body;
